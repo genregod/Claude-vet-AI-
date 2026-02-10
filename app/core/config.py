@@ -2,12 +2,17 @@
 Configuration management for Valor Assist.
 Loads settings from environment variables with validation.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False
+    )
     
     # API Keys
     anthropic_api_key: str
@@ -35,10 +40,6 @@ class Settings(BaseSettings):
     pdf_max_size_mb: int = 50
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 # Global settings instance

@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.schemas import (
     ChatRequest,
@@ -59,7 +59,7 @@ async def chat(request: ChatRequest):
             response=result["response"],
             citations=result.get("citations", []),
             conversation_id=None,  # Could implement conversation tracking
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         
         logger.info("Chat response generated successfully")
@@ -166,7 +166,7 @@ async def health_check():
             status="healthy",
             version=settings.app_version,
             chroma_db_status=chroma_status,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -174,7 +174,7 @@ async def health_check():
             status="unhealthy",
             version=settings.app_version,
             chroma_db_status=f"Error: {str(e)}",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
 
 

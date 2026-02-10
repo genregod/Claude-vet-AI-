@@ -6,7 +6,7 @@ import logging
 import hashlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import voyageai
 import chromadb
 from chromadb.config import Settings
@@ -139,7 +139,7 @@ class DocumentIngestor:
                 "document_id": document_id,
                 "source_type": source_type,
                 "file_path": str(file_path),
-                "ingestion_date": datetime.utcnow().isoformat(),
+                "ingestion_date": datetime.now(timezone.utc).isoformat(),
                 **result["metadata"],
                 **metadata
             }

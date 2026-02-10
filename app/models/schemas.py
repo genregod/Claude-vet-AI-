@@ -3,7 +3,7 @@ Pydantic models for API requests and responses.
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ChatMessage(BaseModel):
@@ -80,4 +80,4 @@ class HealthResponse(BaseModel):
     status: str = Field(default="healthy")
     version: str
     chroma_db_status: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

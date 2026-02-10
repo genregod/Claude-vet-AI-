@@ -102,13 +102,14 @@ async def ingest_document(
                 detail=f"Invalid source_type. Must be one of: {', '.join(valid_types)}"
             )
         
-        # Save uploaded file temporarily
-        temp_path = Path(f"/tmp/{file.filename}")
+        # Sanitize filename to prevent path traversal
+        sanitized_filename = Path(file.filename).name
+        temp_path = Path(f"/tmp/{sanitized_filename}")
         with open(temp_path, "wb") as f:
             content = await file.read()
             f.write(content)
         
-        logger.info(f"Ingesting document: {file.filename} (type: {source_type})")
+        logger.info(f"Ingesting document: {sanitized_filename} (type: {source_type})")
         
         # Get ingestor
         ingestor = get_ingestor()

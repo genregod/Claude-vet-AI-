@@ -42,7 +42,7 @@ class ChatResponse(BaseModel):
         description="Legal citations supporting the response"
     )
     conversation_id: Optional[str] = Field(None, description="Unique conversation identifier")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DocumentMetadata(BaseModel):

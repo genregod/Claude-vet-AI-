@@ -179,12 +179,12 @@ function App() {
             <button type="submit">Create Profile</button>
           </form>
 
-          <div className="patient-list">
+          <div className="veteran-list">
             <h3>Veterans ({veterans.length})</h3>
             {veterans.map(veteran => (
               <div
                 key={veteran.id}
-                className={`patient-item ${selectedVeteran?.id === veteran.id ? 'selected' : ''}`}
+                className={`veteran-item ${selectedVeteran?.id === veteran.id ? 'selected' : ''}`}
                 onClick={() => setSelectedVeteran(veteran)}
               >
                 <strong>{veteran.name}</strong> - {veteran.service_branch}

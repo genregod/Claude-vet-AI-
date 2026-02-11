@@ -97,11 +97,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.patient-list {
+.veteran-list {
   margin-top: 20px;
 }
 
-.patient-item {
+.veteran-item {
   background: #f8f9fa;
   padding: 10px;
   margin-bottom: 10px;
@@ -110,11 +110,11 @@ button:disabled {
   transition: background 0.3s;
 }
 
-.patient-item:hover {
+.veteran-item:hover {
   background: #e9ecef;
 }
 
-.patient-item.selected {
+.veteran-item.selected {
   background: #667eea;
   color: white;
 }

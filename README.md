@@ -1,13 +1,26 @@
-# 🐾 Claude Vet AI
+# 🎖️ Valor Assist
 
-AI-powered veterinary consultation assistant using Anthropic's Claude AI.
+AI-powered VA disability claims assistant for veterans using Anthropic's Claude AI. Valor Assist helps new filers and current veterans looking to appeal their initial VA determination.
 
 ## Features
 
-- **Patient Management**: Create and manage pet patient records
-- **AI Consultations**: Get AI-powered veterinary insights using Claude
+- **Veteran Profile Management**: Create and manage veteran profiles with service history
+- **Claims Assistance**: Get AI-powered guidance for both initial claims and appeals
+- **Evidence Analysis**: Understand what documentation you need for your claim
+- **Service Connection Guidance**: Help articulating how conditions relate to service
+- **Appeal Strategies**: Specific guidance for strengthening appeals
 - **Modern UI**: Clean, responsive interface for easy use
 - **REST API**: Full-featured API with automatic documentation
+
+## Important Disclaimer
+
+**Valor Assist is for informational and educational purposes only.** This application:
+- Does NOT replace an accredited Veterans Service Officer (VSO) or attorney
+- Does NOT file claims on your behalf
+- Does NOT provide legal advice
+- Should be used as a supplementary research tool
+
+Always consult with an accredited VSO or attorney for official VA claims representation.
 
 ## Tech Stack
 
@@ -98,17 +111,17 @@ docker-compose up
 
 ## API Endpoints
 
-### Patients
-- `GET /api/patients` - List all patients
-- `GET /api/patients/{id}` - Get a specific patient
-- `POST /api/patients` - Create a new patient
-- `PUT /api/patients/{id}` - Update a patient
-- `DELETE /api/patients/{id}` - Delete a patient
+### Veterans
+- `GET /api/veterans` - List all veteran profiles
+- `GET /api/veterans/{id}` - Get a specific veteran profile
+- `POST /api/veterans` - Create a new veteran profile
+- `PUT /api/veterans/{id}` - Update a veteran profile
+- `DELETE /api/veterans/{id}` - Delete a veteran profile
 
-### Consultations
-- `GET /api/consultations` - List all consultations
-- `GET /api/consultations/{id}` - Get a specific consultation
-- `POST /api/consultations` - Create a consultation and get AI response
+### Claims
+- `GET /api/claims` - List all claims
+- `GET /api/claims/{id}` - Get a specific claim
+- `POST /api/claims` - Submit a claim and get AI assistance
 
 ### Health Check
 - `GET /health` - Check API health status
@@ -135,6 +148,20 @@ VITE_API_URL=http://localhost:8000
 3. Create a new API key
 4. Copy it to your `backend/.env` file
 
+## How It Works
+
+1. **Create a Veteran Profile**: Enter service history and contact information
+2. **Submit Claim Details**: Describe conditions, service connection, and available evidence
+3. **Get AI Assistance**: Claude analyzes your claim and provides:
+   - Assessment of claim strength
+   - Required evidence and documentation
+   - Next steps in the claims process
+   - Common pitfalls to avoid
+   - Timeline expectations
+   - Appeal strategies (if applicable)
+4. **Review Guidance**: Use the AI-generated guidance to prepare your claim
+5. **Consult a VSO**: Take the information to an accredited VSO or attorney
+
 ## Project Structure
 
 ```
@@ -143,8 +170,12 @@ Claude-vet-AI-/
 │   ├── app/
 │   │   ├── main.py            # Application entry point
 │   │   ├── routes/            # API endpoints
-│   │   ├── services/          # Business logic (Claude integration)
+│   │   │   ├── veterans.py   # Veteran profile management
+│   │   │   └── claims.py     # Claims assistance
+│   │   ├── services/          # Business logic
+│   │   │   └── claude_service.py  # Claude AI integration
 │   │   └── models/            # Data models
+│   │       └── schemas.py    # Pydantic schemas
 │   ├── requirements.txt       # Python dependencies
 │   └── .env.example          # Environment template
 ├── frontend/                   # React frontend
@@ -162,14 +193,17 @@ Claude-vet-AI-/
 └── README.md                 # This file
 ```
 
+## VA Claims Resources
+
+- [VA.gov - How to File a Claim](https://www.va.gov/disability/how-to-file-claim/)
+- [VA.gov - Evidence Requirements](https://www.va.gov/disability/how-to-file-claim/evidence-needed/)
+- [Find a VSO](https://www.va.gov/vso/)
+- [VA Decision Review Options](https://www.va.gov/decision-reviews/)
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Disclaimer
-
-This application is for informational purposes only and should not replace professional veterinary care. Always consult with a licensed veterinarian for medical advice. 
+This project is licensed under the MIT License. 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Setting up Claude Vet AI development environment..."
+echo "Setting up Valor Assist development environment..."
 
 # Install backend dependencies
 echo "Installing backend dependencies..."

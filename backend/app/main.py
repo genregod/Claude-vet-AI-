@@ -1,14 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import patients, consultations
+from app.routes import veterans, claims
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI(
-    title="Claude Vet AI",
-    description="AI-powered veterinary consultation assistant using Claude",
+    title="Valor Assist - VA Claims AI Assistant",
+    description="AI-powered veterans disability claims assistance using Claude",
     version="0.1.0"
 )
 
@@ -22,13 +22,13 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(patients.router, prefix="/api/patients", tags=["patients"])
-app.include_router(consultations.router, prefix="/api/consultations", tags=["consultations"])
+app.include_router(veterans.router, prefix="/api/veterans", tags=["veterans"])
+app.include_router(claims.router, prefix="/api/claims", tags=["claims"])
 
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Claude Vet AI API",
+        "message": "Welcome to Valor Assist - VA Claims AI Assistant",
         "version": "0.1.0",
         "docs": "/docs"
     }

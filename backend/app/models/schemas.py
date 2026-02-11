@@ -1,20 +1,23 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
-class Patient(BaseModel):
+class Veteran(BaseModel):
     id: Optional[str] = None
     name: str
-    species: str
-    breed: Optional[str] = None
-    age: Optional[int] = None
-    owner_name: str
-    owner_contact: str
+    service_branch: str
+    service_dates: Optional[str] = None
+    discharge_status: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
     created_at: Optional[datetime] = None
 
-class Consultation(BaseModel):
+class Claim(BaseModel):
     id: Optional[str] = None
-    patient_id: str
-    symptoms: str
+    veteran_id: str
+    claim_type: str  # "initial" or "appeal"
+    conditions: str  # Claimed conditions/disabilities
+    service_connection: str  # How conditions relate to service
+    evidence_description: Optional[str] = None
     ai_response: Optional[str] = None
     created_at: Optional[datetime] = None

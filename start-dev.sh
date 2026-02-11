@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Start development environment for Claude Vet AI
+# Start development environment for Valor Assist
 
-echo "🐾 Starting Claude Vet AI Development Environment..."
+echo "🎖️ Starting Valor Assist Development Environment..."
 echo ""
 
 # Check if .env files exist

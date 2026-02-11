@@ -1,0 +1,21 @@
+# Valor Assist — Python dependencies
+# Install: pip install -r requirements.txt
+
+# ── Core framework ───────────────────────────────────────────────────
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
+pydantic>=2.0,<3.0
+pydantic-settings>=2.0,<3.0
+
+# ── LLM integration ─────────────────────────────────────────────────
+anthropic>=0.39,<1.0
+
+# ── Embeddings ───────────────────────────────────────────────────────
+sentence-transformers>=3.0,<4.0   # HuggingFace fallback embeddings
+# voyageai>=0.3,<1.0              # uncomment if using Voyage AI voyage-law-2
+
+# ── Vector database ──────────────────────────────────────────────────
+chromadb>=0.5,<1.0
+
+# ── Utilities ────────────────────────────────────────────────────────
+python-dotenv>=1.0,<2.0

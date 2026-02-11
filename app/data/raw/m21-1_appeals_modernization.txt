@@ -1,0 +1,62 @@
+M21-1, Part I, Chapter 5 — Appeals Modernization Act (AMA) Procedures
+
+Section A: Overview of the Appeals Modernization Act
+
+The Appeals Modernization Act (AMA), effective February 19, 2019, replaced
+the legacy appeals system with three decision review lanes that give
+claimants more choice and control over the review of their claims:
+
+1. Supplemental Claim Lane (VA Form 20-0995)
+   A claimant who disagrees with a VA decision may file a Supplemental Claim
+   by submitting new and relevant evidence. The agency of original
+   jurisdiction (AOJ) will readjudicate the claim considering all evidence
+   of record. There is no time limit to file a Supplemental Claim as long
+   as new and relevant evidence is submitted.
+
+   Key requirements:
+   - The claimant must submit or identify new and relevant evidence.
+   - "New" evidence is evidence not previously part of the record.
+   - "Relevant" evidence tends to prove or disprove a matter at issue.
+   - The duty to assist applies in the Supplemental Claim lane.
+
+2. Higher-Level Review Lane (VA Form 20-0996)
+   A claimant may request a Higher-Level Review (HLR) within one year of
+   the decision being reviewed. A senior reviewer (Decision Review Officer)
+   will conduct a de novo review of the same evidence that was before the
+   AOJ at the time of the prior decision.
+
+   Key characteristics:
+   - No new evidence may be submitted by the claimant.
+   - The reviewer may identify a duty to assist error that must be corrected.
+   - An informal conference may be requested but is not required.
+   - The effective date is preserved if the HLR is filed within one year.
+
+3. Appeal to the Board of Veterans' Appeals (VA Form 10182)
+   A claimant may appeal directly to the Board of Veterans' Appeals (BVA).
+   Three docket options are available:
+
+   a. Direct Review — The Board reviews the existing record with no new
+      evidence and no hearing. This is the fastest Board docket.
+
+   b. Evidence Submission — The claimant may submit additional evidence
+      within 90 days of filing the appeal. No hearing is held.
+
+   c. Hearing Request — The claimant may request a hearing before a
+      Veterans Law Judge and may submit evidence within 90 days following
+      the hearing.
+
+Section B: Filing Deadlines and Effective Dates
+
+- Supplemental Claim: No deadline, but the effective date depends on when
+  new and relevant evidence is received.
+- Higher-Level Review: Must be filed within one year of the decision.
+- Board Appeal: Must be filed within one year of the decision.
+- If a claimant continuously pursues a claim through one of the AMA lanes
+  within one year of each decision, the effective date may be preserved
+  back to the original date of claim.
+
+Section C: Duty to Assist
+
+Under the AMA, the duty to assist applies in the Supplemental Claim lane
+and on remand from the Board. It does not apply in the Higher-Level Review
+lane or during Board proceedings (except on remand).

@@ -1,29 +1,44 @@
-version: '3.8'
+# ── Valor Assist — Full-Stack Local Development ──────────────────────
+#
+# Run:  docker-compose up --build
+# Open: http://localhost:3000
+#
+# Architecture:
+#   frontend (nginx:80)  →  /api/*  →  backend (uvicorn:8000)
+#   Browser connects to frontend on port 3000.
+#   All /api/* requests are proxied to the backend.
 
 services:
+  # ── Backend (FastAPI + RAG pipeline) ───────────────────────────────
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: .
+    container_name: valor-assist-api
     ports:
       - "8000:8000"
-    environment:
-      - PORT=8000
     env_file:
-      - ./backend/.env
+      - .env
     volumes:
-      - ./backend:/app
-    command: python -m app.main
+      - chroma-data:/opt/valor-assist/app/data/chroma_db
+      - upload-data:/opt/valor-assist/app/data/uploads
+      - ./app/data/raw:/opt/valor-assist/app/data/raw:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # ── Frontend (React + nginx proxy) ─────────────────────────────────
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
+    container_name: valor-assist-web
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  chroma-data:
+  upload-data:

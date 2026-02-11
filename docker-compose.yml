@@ -1,10 +1,16 @@
-# ── Valor Assist — Local Development Compose ─────────────────────────
-# Run:  docker-compose up --build
+# ── Valor Assist — Full-Stack Local Development ──────────────────────
 #
-# For AWS production, use ECS Fargate or App Runner instead of compose.
+# Run:  docker-compose up --build
+# Open: http://localhost:3000
+#
+# Architecture:
+#   frontend (nginx:80)  →  /api/*  →  backend (uvicorn:8000)
+#   Browser connects to frontend on port 3000.
+#   All /api/* requests are proxied to the backend.
 
 services:
-  valor-assist:
+  # ── Backend (FastAPI + RAG pipeline) ───────────────────────────────
+  backend:
     build: .
     container_name: valor-assist-api
     ports:
@@ -12,10 +18,8 @@ services:
     env_file:
       - .env
     volumes:
-      # Persist vector DB and uploaded documents across restarts
       - chroma-data:/opt/valor-assist/app/data/chroma_db
       - upload-data:/opt/valor-assist/app/data/uploads
-      # Mount raw legal documents for ingestion
       - ./app/data/raw:/opt/valor-assist/app/data/raw:ro
     restart: unless-stopped
     healthcheck:
@@ -23,6 +27,17 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # ── Frontend (React + nginx proxy) ─────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: valor-assist-web
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   chroma-data:

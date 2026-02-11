@@ -56,6 +56,29 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 3600      # 1 hour idle timeout
     max_conversation_turns: int = 20     # max turns kept in context window
 
+    # ── Authentication (ID.me + OAuth) ───────────────────────────────
+    # JWT signing secret (generate a strong random string for production)
+    jwt_secret_key: str = Fernet.generate_key().decode()
+    jwt_access_token_ttl: int = 900      # 15 minutes
+    jwt_refresh_token_ttl: int = 604800  # 7 days
+
+    # ID.me OAuth2/OIDC (preferred — veteran identity proofing)
+    # Register at: https://developers.id.me
+    idme_client_id: str = ""
+    idme_client_secret: str = ""
+    idme_redirect_uri: str = "http://localhost:3000/auth/idme/callback"
+
+    # Liveness / engagement timeout (seconds of inactivity before re-auth)
+    liveness_timeout_seconds: int = 1800  # 30 minutes
+
+    # ── VA.gov Lighthouse API ────────────────────────────────────────
+    # Register at: https://developer.va.gov
+    va_api_key: str = ""
+    va_api_client_id: str = ""
+    va_api_client_secret: str = ""
+    va_api_redirect_uri: str = "http://localhost:3000/auth/va/callback"
+    va_api_sandbox: bool = True          # False for production
+
     # ── Security / CORS ──────────────────────────────────────────────
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     rate_limit_max_requests: int = 30    # per window per IP

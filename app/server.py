@@ -3,15 +3,27 @@ Valor Assist — FastAPI Server
 
 Exposes the RAG pipeline through HTTP endpoints:
 
-  POST /chat              — multi-turn Q&A (chat widget)
-  POST /chat/quick-action — pre-built quick action queries
-  POST /chat/session      — create a new chat session
-  DELETE /chat/session     — end a chat session
-  POST /evaluate          — case intake form evaluation
-  POST /upload            — secure document upload
-  GET  /health            — liveness check
-  GET  /stats             — vector store statistics
-  POST /ingest            — trigger document re-ingestion (admin)
+  Public (no auth):
+    GET  /health                  — liveness check
+    POST /chat/session            — create a new chat session
+    POST /chat                    — multi-turn Q&A (chat widget)
+    POST /chat/quick-action       — pre-built quick action queries
+
+  Auth routes (/auth/*):
+    POST /auth/signup             — email/password registration
+    GET  /auth/idme/login         — ID.me login redirect URL
+    POST /auth/idme/callback      — ID.me authorization code callback
+    GET  /auth/va/connect         — VA.gov OAuth consent redirect (requires LOA3)
+    POST /auth/va/callback        — VA.gov authorization code callback
+    POST /auth/consent            — consent acknowledgment
+    POST /auth/refresh            — refresh access token
+    GET  /auth/me                 — current user profile
+
+  Protected (requires auth + consent):
+    POST /evaluate                — case intake form evaluation
+    POST /upload                  — secure document upload
+    GET  /stats                   — vector store statistics
+    POST /ingest                  — trigger document re-ingestion (admin)
 """
 
 from __future__ import annotations
@@ -22,16 +34,23 @@ from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 
+from app.auth import UserProfile
+from app.auth_routes import (
+    router as auth_router,
+    get_current_user,
+    require_consent,
+    init_auth_dependencies,
+)
 from app.config import settings, UPLOADS_DIR
 from app.ingest import ingest_directory, ingest_file
 from app.middleware import configure_security
+from app.pii_shield import install_log_scrubber
 from app.prompts import QUICK_ACTION_QUERIES
 from app.rag_chain import RAGChain
 from app.sessions import SessionStore
-from app.utils.text_cleaning import clean_document
 from app.vector_store import VectorStore
 
 logging.basicConfig(
@@ -49,13 +68,19 @@ session_store: SessionStore | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize the vector store, RAG chain, and session store at startup."""
+    """Initialize all subsystems at startup."""
     global rag_chain, session_store
     logger.info("Starting Valor Assist backend …")
+
+    # Install PII log scrubber FIRST — protects all subsequent log output
+    install_log_scrubber()
+
     store = VectorStore()
     rag_chain = RAGChain(vector_store=store)
     session_store = SessionStore()
-    logger.info("RAG chain + session store initialized — ready to serve.")
+    init_auth_dependencies()
+
+    logger.info("RAG chain + session store + auth initialized — ready to serve.")
     yield
     logger.info("Shutting down Valor Assist backend.")
 
@@ -66,12 +91,15 @@ app = FastAPI(
         "AI-powered assistant helping U.S. military veterans navigate "
         "VA disability claims, appeals, and 38 CFR regulations."
     ),
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
 # Apply CORS, rate limiting, and security headers
 configure_security(app)
+
+# Mount authentication routes
+app.include_router(auth_router)
 
 
 # ── Request / Response schemas ───────────────────────────────────────
@@ -314,11 +342,16 @@ async def quick_action(request: QuickActionRequest):
 # ── Case evaluation (intake form) ───────────────────────────────────
 
 @app.post("/evaluate", response_model=EvaluateResponse)
-async def evaluate(request: EvaluateRequest):
+async def evaluate(
+    request: EvaluateRequest,
+    current_user: UserProfile = Depends(require_consent),
+):
     """
     Accepts the Free Case Evaluation form data (service branch,
     current rating, primary concerns) and returns a structured
     preliminary assessment grounded in retrieved legal context.
+
+    Requires: authentication + identity verification + consent.
     """
     _require_initialized()
 
@@ -351,12 +384,14 @@ MAX_UPLOAD_BYTES = settings.max_upload_size_mb * 1024 * 1024
 async def upload_document(
     file: UploadFile = File(...),
     source_type: str = Form(default="General"),
+    current_user: UserProfile = Depends(get_current_user),
 ):
     """
     Secure document upload endpoint. Veterans can submit supporting
     evidence files which are cleaned, chunked, and added to the
     vector store for retrieval.
 
+    Requires: authentication.
     Accepted formats: .txt, .md
     Max size: configurable (default 10 MB)
     """

@@ -21,5 +21,10 @@ chromadb>=0.5,<1.0
 cryptography>=42.0,<44.0          # Fernet encryption for PII in sessions
 python-multipart>=0.0.9,<1.0     # required for FastAPI file uploads
 
+# ── Authentication ───────────────────────────────────────────────────
+PyJWT>=2.8,<3.0                   # JWT access/refresh tokens
+httpx>=0.27,<1.0                  # async HTTP client (ID.me + VA API calls)
+pydantic[email]>=2.0,<3.0        # EmailStr validation
+
 # ── Utilities ────────────────────────────────────────────────────────
 python-dotenv>=1.0,<2.0

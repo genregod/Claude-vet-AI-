@@ -20,7 +20,7 @@ class ClaudeService:
         """
         # Check if API key exists first before checking client
         if not self.api_key:
-            return """⚠️ ANTHROPIC_API_KEY is not configured. 
+            return """⚠️ ANTHROPIC_API_KEY is not configured.
 
 To enable AI claim assistance:
 1. Get an API key from https://www.anthropic.com/

@@ -1,0 +1,29 @@
+# ── Valor Assist — Local Development Compose ─────────────────────────
+# Run:  docker-compose up --build
+#
+# For AWS production, use ECS Fargate or App Runner instead of compose.
+
+services:
+  valor-assist:
+    build: .
+    container_name: valor-assist-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist vector DB and uploaded documents across restarts
+      - chroma-data:/opt/valor-assist/app/data/chroma_db
+      - upload-data:/opt/valor-assist/app/data/uploads
+      # Mount raw legal documents for ingestion
+      - ./app/data/raw:/opt/valor-assist/app/data/raw:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  chroma-data:
+  upload-data:

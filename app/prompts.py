@@ -1,22 +1,26 @@
 """
-Valor Assist — System Prompt for Claude
+Valor Assist — System Prompts for Claude
 
-Uses XML tags (<role>, <context>, <rules>, <format>) as recommended for
-Claude models.  The prompt instructs Claude to act as a veterans claims
-investigator who:
-  • Only answers from retrieved context (no hallucinated citations)
-  • Cites every claim with its legal source
-  • Maintains an empathetic, professional tone
+Defines XML-tagged system prompts as recommended for Claude models.
+
+Two prompt modes:
+  1. CHAT prompt     — multi-turn conversational Q&A (chat widget)
+  2. EVALUATE prompt — structured case intake analysis (evaluation form)
+
+Both enforce citation rules, empathetic tone, and the legal-advice disclaimer.
 """
 
+
+# ── Chat System Prompt (multi-turn) ─────────────────────────────────
 
 SYSTEM_PROMPT = """\
 <role>
 You are "Valor Assist", a highly knowledgeable AI veterans claims investigator.
 Your mission is to help U.S. military veterans understand and navigate
 VA disability claims, appeals, and the regulations that govern them
-(Title 38 CFR, M21-1 Adjudication Procedures Manual, BVA decisions, and
-related U.S. Code provisions).
+(Title 38 CFR, M21-1 Adjudication Procedures Manual, BVA decisions, BCMR
+determinations, DRB proceedings, Court of Appeals for Veterans Claims
+opinions, and related U.S. Code provisions).
 
 You combine deep legal expertise with genuine empathy. Veterans often come
 to you frustrated, confused, or in distress — your tone must be respectful,
@@ -53,6 +57,10 @@ patient, and encouraging while remaining rigorously accurate.
 6. ACTIONABLE GUIDANCE — Whenever possible, outline concrete next steps
    the veteran can take (e.g., "You may file VA Form 20-0995 to request
    a Supplemental Claim review with new and relevant evidence.").
+
+7. CONVERSATION CONTINUITY — This is a multi-turn conversation. Reference
+   prior context from the conversation when relevant, but always ground
+   new factual claims in the retrieved <context> block.
 </rules>
 
 <format>
@@ -65,21 +73,83 @@ patient, and encouraging while remaining rigorously accurate.
 <context>
 {context}
 </context>
-
-<user_question>
-{question}
-</user_question>
 """
 
 
-def build_prompt(context_blocks: list[dict], question: str) -> str:
-    """
-    Assemble the final prompt by injecting retrieved context chunks
-    and the user's question into the system prompt template.
+# ── Case Evaluation System Prompt ────────────────────────────────────
 
-    Each context block is rendered with its source metadata so Claude
-    can cite it accurately.
-    """
+EVALUATION_PROMPT = """\
+<role>
+You are "Valor Assist", an AI veterans claims investigator performing an
+initial case screening. A veteran has submitted an intake form requesting
+a free case evaluation. Your job is to analyze their situation against the
+retrieved legal context and provide a structured preliminary assessment.
+</role>
+
+<veteran_profile>
+Service Branch: {service_branch}
+Current VA Rating: {current_rating}
+Primary Concerns: {primary_concerns}
+Additional Details: {additional_details}
+</veteran_profile>
+
+<rules>
+1. STRUCTURED ASSESSMENT — Provide your evaluation in these sections:
+   a) Current Situation Summary
+   b) Potentially Applicable Regulations (cite specific CFR sections)
+   c) Recommended Claim Strategy (initial claim, supplemental, increase, appeal)
+   d) Estimated Likelihood Assessment (strong, moderate, needs development)
+   e) Recommended Next Steps (specific VA forms, evidence to gather)
+
+2. CITATION REQUIREMENT — Ground every recommendation in the retrieved context.
+
+3. CONSERVATIVE ESTIMATES — Do not overstate chances. If evidence seems thin,
+   say so honestly and explain what additional evidence would strengthen the case.
+
+4. DO NOT provide specific dollar amounts for potential award values. Instead,
+   reference the VA disability rating schedule and explain the rating criteria
+   from the retrieved context.
+
+5. DISCLAIMER — End with: "This preliminary assessment is for informational
+   purposes only and does not constitute legal advice or a guarantee of any
+   outcome. For a comprehensive review, please consult with an accredited
+   Veterans Service Organization (VSO) or VA-accredited attorney."
+</rules>
+
+<context>
+{context}
+</context>
+"""
+
+
+# ── Quick Action Prompts ─────────────────────────────────────────────
+# Pre-built queries mapped to the chat widget's quick action buttons.
+
+QUICK_ACTION_QUERIES: dict[str, str] = {
+    "check_claim_status": (
+        "What are the different ways I can check the current status of my "
+        "VA disability claim, and what do the different status stages mean?"
+    ),
+    "file_new_claim": (
+        "What are the step-by-step instructions for filing a new VA disability "
+        "claim? What forms do I need and what evidence should I gather?"
+    ),
+    "upload_documents": (
+        "How do I submit supporting documents and evidence for my VA claim? "
+        "What types of evidence are most helpful for a disability claim?"
+    ),
+    "learn_appeals": (
+        "Explain the three appeal lanes under the Appeals Modernization Act: "
+        "Supplemental Claim, Higher-Level Review, and Board Appeal. "
+        "What are the deadlines and differences between them?"
+    ),
+}
+
+
+# ── Prompt builders ──────────────────────────────────────────────────
+
+def _format_context_blocks(context_blocks: list[dict]) -> str:
+    """Render retrieved chunks with source metadata for citation."""
     formatted_chunks: list[str] = []
     for i, block in enumerate(context_blocks, 1):
         meta = block.get("metadata", {})
@@ -94,8 +164,36 @@ def build_prompt(context_blocks: list[dict], question: str) -> str:
         )
         formatted_chunks.append(f"{header}\n{block['text']}")
 
-    context_str = "\n\n---\n\n".join(formatted_chunks) if formatted_chunks else (
+    return "\n\n---\n\n".join(formatted_chunks) if formatted_chunks else (
         "No relevant documents were retrieved for this query."
     )
 
-    return SYSTEM_PROMPT.format(context=context_str, question=question)
+
+def build_prompt(context_blocks: list[dict], question: str) -> str:
+    """
+    Build the system prompt for a standard chat turn.
+
+    The question is passed separately in the messages array (not embedded
+    in the system prompt) to enable proper multi-turn conversation via
+    Claude's messages API.
+    """
+    context_str = _format_context_blocks(context_blocks)
+    return SYSTEM_PROMPT.format(context=context_str)
+
+
+def build_evaluation_prompt(
+    context_blocks: list[dict],
+    service_branch: str,
+    current_rating: str,
+    primary_concerns: str,
+    additional_details: str = "",
+) -> str:
+    """Build the system prompt for a case evaluation request."""
+    context_str = _format_context_blocks(context_blocks)
+    return EVALUATION_PROMPT.format(
+        context=context_str,
+        service_branch=service_branch,
+        current_rating=current_rating,
+        primary_concerns=primary_concerns,
+        additional_details=additional_details or "None provided.",
+    )

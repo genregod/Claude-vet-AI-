@@ -13,6 +13,10 @@ Source type detection uses filename conventions:
   - Files containing "m21" or "m21-1"        → tag "M21-1_Manual"
   - Files containing "bva" or "decision"     → tag "BVA_Decision"
   - Files containing "usc" or "us_code"      → tag "US_Code"
+  - Files containing "bcmr"                  → tag "BCMR"
+  - Files containing "drb"                   → tag "DRB"
+  - Files containing "cova" or "vet_app"     → tag "COVA"
+  - Files containing "va_form"               → tag "VA_Form"
   - Everything else                          → tag "General"
 """
 
@@ -51,6 +55,10 @@ _SOURCE_TAG_RULES: list[tuple[list[str], str]] = [
     (["m21-1", "m21_1", "m21"],       "M21-1_Manual"),
     (["bva", "decision"],             "BVA_Decision"),
     (["usc", "us_code"],              "US_Code"),
+    (["bcmr"],                         "BCMR"),        # Board for Correction of Military Records
+    (["drb"],                          "DRB"),         # Discharge Review Board
+    (["cova", "vet_app", "cavc"],      "COVA"),        # Court of Appeals for Veterans Claims
+    (["va_form"],                      "VA_Form"),     # VA form instructions / guidance
 ]
 
 

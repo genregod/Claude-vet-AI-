@@ -2,11 +2,14 @@
 Valor Assist — Configuration
 
 Centralizes all settings: API keys, model selection, chunking parameters,
-and vector DB paths. Uses pydantic-settings so values can be overridden
-with environment variables or a .env file.
+vector DB paths, session management, security, and AWS deployment config.
+Uses pydantic-settings so values can be overridden with environment
+variables or a .env file.
 """
 
 from pathlib import Path
+
+from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings
 
 
@@ -15,6 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RAW_DOCS_DIR = DATA_DIR / "raw"
 CHROMA_DIR = DATA_DIR / "chroma_db"
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+# Ensure upload directory exists
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
@@ -41,6 +48,20 @@ class Settings(BaseSettings):
     # ── Retrieval ────────────────────────────────────────────────────
     retrieval_top_k: int = 5             # top-k chunks returned per query
     chroma_collection_name: str = "valor_assist"
+
+    # ── Session Management ───────────────────────────────────────────
+    # Fernet key for encrypting PII in session storage.
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str = Fernet.generate_key().decode()
+    session_ttl_seconds: int = 3600      # 1 hour idle timeout
+    max_conversation_turns: int = 20     # max turns kept in context window
+
+    # ── Security / CORS ──────────────────────────────────────────────
+    allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    rate_limit_max_requests: int = 30    # per window per IP
+    rate_limit_window_seconds: int = 60
+    enable_hsts: bool = False            # enable in production behind HTTPS
+    max_upload_size_mb: int = 10
 
     # ── Server ───────────────────────────────────────────────────────
     host: str = "0.0.0.0"

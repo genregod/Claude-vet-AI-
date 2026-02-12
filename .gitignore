@@ -87,4 +87,5 @@ app/data/training/
 app/data/chroma_db/
 app/data/data_manifest.json
 app/data/collection_report.md
+app/data/import_report.json
 logs/data_collection.log

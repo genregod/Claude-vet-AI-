@@ -166,8 +166,8 @@ def normalize_to_text(filepath: Path) -> Optional[str]:
         return extract_text_from_html(filepath)
     elif suffix == ".xml":
         return extract_text_from_xml(filepath)
-    elif suffix == ".json":
-        # JSON files are metadata or structured data — skip text extraction
+    elif suffix in (".json", ".jsonl"):
+        # JSON/JSONL files are metadata or structured data — skip text extraction
         return None
     elif suffix == ".md":
         try:

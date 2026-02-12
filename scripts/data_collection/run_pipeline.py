@@ -2,11 +2,12 @@
 Pipeline Orchestrator — Master controller for the data collection pipeline.
 
 Usage:
-    python -m scripts.data_collection.run_pipeline --phase collect    # Download everything
+    python -m scripts.data_collection.run_pipeline --phase import     # Import existing VA Model Training data
+    python -m scripts.data_collection.run_pipeline --phase collect    # Download new data from all sources
     python -m scripts.data_collection.run_pipeline --phase clean      # Clean all raw data
     python -m scripts.data_collection.run_pipeline --phase prepare    # Generate training data
     python -m scripts.data_collection.run_pipeline --phase ingest     # Load into ChromaDB
-    python -m scripts.data_collection.run_pipeline --phase all        # Full pipeline
+    python -m scripts.data_collection.run_pipeline --phase all        # Full pipeline (import + collect + clean + prepare + ingest)
     python -m scripts.data_collection.run_pipeline --phase status     # Show collection progress
 
 Options:
@@ -94,6 +95,17 @@ def update_manifest_source(manifest: dict, source_name: str, stats: dict) -> Non
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # PHASE RUNNERS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+def run_import() -> dict:
+    """Phase 0: Import existing VA Model Training data into pipeline structure."""
+    from scripts.data_collection.import_existing import import_existing_data
+
+    logger.info("=" * 70)
+    logger.info("PHASE 0: IMPORT EXISTING DATA")
+    logger.info("=" * 70)
+
+    return import_existing_data()
 
 
 def run_collect(source_filter: str = None) -> dict:
@@ -284,9 +296,10 @@ def run_status() -> dict:
 
 
 def run_all(source_filter: str = None) -> dict:
-    """Run the complete pipeline: collect -> clean -> prepare -> ingest."""
+    """Run the complete pipeline: import -> collect -> clean -> prepare -> ingest."""
     results = {}
 
+    results["import"] = run_import()
     results["collect"] = run_collect(source_filter)
     results["clean"] = run_clean()
     results["prepare"] = run_prepare()
@@ -373,14 +386,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Phases:
+  import     Import existing VA Model Training data into pipeline structure
   collect    Download raw data from all sources
   clean      Clean and normalize all raw data
   prepare    Generate fine-tuning training data
   ingest     Load cleaned data into ChromaDB
-  all        Run the full pipeline (collect -> clean -> prepare -> ingest)
+  all        Run the full pipeline (import -> collect -> clean -> prepare -> ingest)
   status     Show collection progress and statistics
 
 Examples:
+  python -m scripts.data_collection.run_pipeline --phase import
   python -m scripts.data_collection.run_pipeline --phase status
   python -m scripts.data_collection.run_pipeline --phase collect --source title_38_cfr
   python -m scripts.data_collection.run_pipeline --phase all
@@ -390,7 +405,7 @@ Examples:
     parser.add_argument(
         "--phase",
         required=True,
-        choices=["collect", "clean", "prepare", "ingest", "all", "status"],
+        choices=["import", "collect", "clean", "prepare", "ingest", "all", "status"],
         help="Pipeline phase to execute",
     )
     parser.add_argument(
@@ -415,6 +430,7 @@ Examples:
 
     # Route to appropriate phase
     phase_map = {
+        "import": run_import,
         "collect": lambda: run_collect(args.source),
         "clean": run_clean,
         "prepare": run_prepare,

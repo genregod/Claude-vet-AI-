@@ -18,6 +18,9 @@ CLEANED_DIR = DATA_DIR / "cleaned"
 TRAINING_DIR = DATA_DIR / "training"
 CHROMA_DIR = DATA_DIR / "chroma_db"
 
+# Existing data from origin/main (VA Model Training)
+EXISTING_DATA_DIR = PROJECT_ROOT / "VA Model Training"
+
 # Logging
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_FILE = LOG_DIR / "data_collection.log"

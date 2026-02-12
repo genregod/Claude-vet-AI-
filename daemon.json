@@ -1,0 +1,41 @@
+{
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultReservedSpace": "15GB",
+      "policy": [
+        {
+          "maxUsedSpace": "30GB",
+          "keepDuration": "72h",
+          "filter": [
+            "type==source.local,type==exec.cachemount,type==source.git.checkout"
+          ]
+        },
+        {
+          "maxUsedSpace": "50GB",
+          "keepDuration": "168h"
+        }
+      ]
+    }
+  },
+  "dns": ["8.8.8.8", "8.8.4.4"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "50m",
+    "max-file": "3"
+  },
+  "max-concurrent-downloads": 5,
+  "max-concurrent-uploads": 3,
+  "max-download-attempts": 5,
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 65536,
+      "Soft": 65536
+    }
+  },
+  "shutdown-timeout": 30,
+  "live-restore": true,
+  "init": true,
+  "log-level": "warn"
+}

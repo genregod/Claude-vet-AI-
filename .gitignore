@@ -78,3 +78,13 @@ yarn-error.log*
 tmp/
 temp/
 *.tmp
+
+# Data Collection Pipeline — raw data and outputs
+# (Keep the pipeline code, exclude generated/downloaded data)
+app/data/raw/
+app/data/cleaned/
+app/data/training/
+app/data/chroma_db/
+app/data/data_manifest.json
+app/data/collection_report.md
+logs/data_collection.log

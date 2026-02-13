@@ -35,6 +35,8 @@ from enum import Enum
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.auth import UserProfile
@@ -44,6 +46,7 @@ from app.auth_routes import (
     require_consent,
     init_auth_dependencies,
 )
+from app.claim_routes import router as claims_router, init_claims
 from app.config import settings, UPLOADS_DIR
 from app.ingest import ingest_directory, ingest_file
 from app.middleware import configure_security
@@ -79,8 +82,9 @@ async def lifespan(app: FastAPI):
     rag_chain = RAGChain(vector_store=store)
     session_store = SessionStore()
     init_auth_dependencies()
+    init_claims(vector_store=store)
 
-    logger.info("RAG chain + session store + auth initialized — ready to serve.")
+    logger.info("RAG chain + session store + auth + claims initialized — ready to serve.")
     yield
     logger.info("Shutting down Valor Assist backend.")
 
@@ -100,6 +104,28 @@ configure_security(app)
 
 # Mount authentication routes
 app.include_router(auth_router)
+
+# Mount claims questionnaire routes
+app.include_router(claims_router)
+
+
+# ── /api prefix support ─────────────────────────────────────────────
+# The frontend sends all requests to /api/... (for Vite proxy in dev).
+# This middleware strips the /api prefix so the same route handlers
+# work for both /chat and /api/chat, etc.
+
+from starlette.middleware.base import BaseHTTPMiddleware as _BHMW
+
+class _ApiPrefixMiddleware(_BHMW):
+    async def dispatch(self, request, call_next):
+        if request.url.path.startswith("/api/"):
+            # Rewrite /api/chat → /chat so existing route handlers match
+            scope = request.scope
+            scope["path"] = request.url.path[4:]  # strip "/api"
+            scope["raw_path"] = scope["path"].encode("utf-8")
+        return await call_next(request)
+
+app.add_middleware(_ApiPrefixMiddleware)
 
 
 # ── Request / Response schemas ───────────────────────────────────────
@@ -136,6 +162,11 @@ class QuickAction(str, Enum):
     FILE_NEW_CLAIM = "file_new_claim"
     UPLOAD_DOCUMENTS = "upload_documents"
     LEARN_APPEALS = "learn_appeals"
+    # Additional aliases the frontend sends
+    LEARN_ABOUT_APPEALS = "learn_about_appeals"
+    PTSD_SERVICE_CONNECTION = "ptsd_service_connection"
+    CHECK_ELIGIBILITY = "check_eligibility"
+    FILING_INSTRUCTIONS = "filing_instructions"
 
 
 class QuickActionRequest(BaseModel):
@@ -468,6 +499,40 @@ async def ingest():
         status="success",
         chunks_ingested=count,
         total_documents=rag_chain._store.count,
+    )
+
+
+# ── Serve React frontend (SPA) ───────────────────────────────────────
+# IMPORTANT: This must be AFTER all API routes so the catch-all doesn't
+# intercept /health, /chat, /evaluate, etc.
+
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if _FRONTEND_DIR.is_dir():
+    # Serve static assets (JS, CSS, images) under /assets
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_FRONTEND_DIR / "assets"),
+        name="frontend-assets",
+    )
+
+    @app.get("/")
+    async def serve_spa_root():
+        """Serve the React SPA index.html at root."""
+        return FileResponse(_FRONTEND_DIR / "index.html")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_fallback(full_path: str):
+        """Catch-all: serve index.html for client-side routing, or static files."""
+        file_path = _FRONTEND_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_FRONTEND_DIR / "index.html")
+
+    logger.info(f"Frontend SPA mounted from {_FRONTEND_DIR}")
+else:
+    logger.warning(
+        f"Frontend build not found at {_FRONTEND_DIR} — run 'cd frontend && npm run build'"
     )
 
 

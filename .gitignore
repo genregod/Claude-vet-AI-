@@ -23,6 +23,13 @@ app/data/chroma_db/
 *.swp
 *.swo
 
+# Node
+node_modules/
+frontend/dist/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Large archives
+*.zip

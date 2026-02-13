@@ -92,7 +92,9 @@ class VALighthouseClient:
         self._client_id = settings.va_api_client_id
         self._redirect_uri = settings.va_api_redirect_uri
 
-    def get_authorization_url(self, state: str, scopes: list[VAScope] | None = None) -> str:
+    def get_authorization_url(
+        self, state: str, scopes: list[VAScope] | None = None,
+    ) -> str:
         """
         Generate the VA.gov OAuth2 authorization URL.
 
@@ -147,7 +149,10 @@ class VALighthouseClient:
 
     # ── Data fetchers ────────────────────────────────────────────────
 
-    async def _get(self, path: str, creds: VACredentials, params: dict | None = None) -> dict:
+    async def _get(
+        self, path: str, creds: VACredentials,
+        params: dict | None = None,
+    ) -> dict:
         """Authenticated GET against VA Lighthouse."""
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(

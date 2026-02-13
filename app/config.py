@@ -51,7 +51,9 @@ class Settings(BaseSettings):
 
     # ── Session Management ───────────────────────────────────────────
     # Fernet key for encrypting PII in session storage.
-    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Generate with:
+    # python -c "from cryptography.fernet import Fernet; \
+    #   print(Fernet.generate_key().decode())"
     encryption_key: str = Fernet.generate_key().decode()
     session_ttl_seconds: int = 3600      # 1 hour idle timeout
     max_conversation_turns: int = 20     # max turns kept in context window

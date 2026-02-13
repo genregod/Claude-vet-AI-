@@ -55,9 +55,9 @@ _SOURCE_TAG_RULES: list[tuple[list[str], str]] = [
     (["m21-1", "m21_1", "m21"],       "M21-1_Manual"),
     (["bva", "decision"],             "BVA_Decision"),
     (["usc", "us_code"],              "US_Code"),
-    (["bcmr"],                         "BCMR"),        # Board for Correction of Military Records
-    (["drb"],                          "DRB"),         # Discharge Review Board
-    (["cova", "vet_app", "cavc"],      "COVA"),        # Court of Appeals for Veterans Claims
+    (["bcmr"],                         "BCMR"),        # BCMR
+    (["drb"],                          "DRB"),         # DRB
+    (["cova", "vet_app", "cavc"],      "COVA"),        # COVA
     (["va_form"],                      "VA_Form"),     # VA form instructions / guidance
 ]
 

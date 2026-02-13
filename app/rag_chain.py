@@ -174,7 +174,10 @@ class RAGChain:
             system=system_prompt,
             messages=[{
                 "role": "user",
-                "content": "Please provide a preliminary case evaluation based on my profile.",
+                "content": (
+                    "Please provide a preliminary "
+                    "case evaluation based on my profile."
+                ),
             }],
         )
 

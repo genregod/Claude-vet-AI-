@@ -23,7 +23,6 @@ Security model:
 from __future__ import annotations
 
 import hashlib
-import hmac
 import logging
 import secrets
 import time

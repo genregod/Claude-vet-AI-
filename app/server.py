@@ -120,7 +120,8 @@ class ChatRequest(BaseModel):
         default=None,
         description=(
             "Optional: restrict retrieval to a specific source type. "
-            "Values: 38_CFR, M21-1_Manual, BVA_Decision, US_Code, BCMR, DRB, COVA, General."
+            "Values: 38_CFR, M21-1_Manual, BVA_Decision, "
+            "US_Code, BCMR, DRB, COVA, General."
         ),
     )
     top_k: int | None = Field(
@@ -146,12 +147,18 @@ class QuickActionRequest(BaseModel):
 class EvaluateRequest(BaseModel):
     service_branch: str = Field(
         ...,
-        description="Military branch of service (e.g., Army, Navy, Air Force, Marines, Coast Guard).",
+        description=(
+            "Military branch of service "
+            "(e.g., Army, Navy, Air Force, Marines, Coast Guard)."
+        ),
         json_schema_extra={"examples": ["Army"]},
     )
     current_rating: str = Field(
         ...,
-        description="Current VA disability rating (e.g., '0%', '30%', '70%', 'Not yet rated').",
+        description=(
+            "Current VA disability rating "
+            "(e.g., '0%', '30%', '70%', 'Not yet rated')."
+        ),
         json_schema_extra={"examples": ["30%"]},
     )
     primary_concerns: str = Field(
@@ -159,7 +166,11 @@ class EvaluateRequest(BaseModel):
         min_length=10,
         max_length=3000,
         description="Description of the veteran's primary claim concerns.",
-        json_schema_extra={"examples": ["PTSD from combat deployment, tinnitus, and knee injury"]},
+        json_schema_extra={
+            "examples": [
+                "PTSD from combat deployment, tinnitus, and knee injury"
+            ]
+        },
     )
     additional_details: str = Field(
         default="",

@@ -26,3 +26,13 @@ app/data/chroma_db/
 # OS
 .DS_Store
 Thumbs.db
+# Node
+node_modules/
+frontend/dist/
+
+# Uploads (user data, not tracked)
+app/data/uploads/*
+!app/data/uploads/.gitkeep
+
+# Large archives
+*.zip

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # ── Anthropic / Claude ───────────────────────────────────────────
     anthropic_api_key: str = ""
-    claude_model: str = "claude-3-5-sonnet-latest"
+    claude_model: str = "claude-sonnet-4-20250514"
     claude_max_tokens: int = 4096
     claude_temperature: float = 0.2  # low temp for factual legal analysis
 

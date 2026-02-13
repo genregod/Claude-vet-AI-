@@ -1,12 +1,26 @@
 # ── Valor Assist Frontend — Multi-stage Docker build ─────────────────
-# Stage 1: Build the React app with Vite
+# Stage 1: Build the React + TypeScript app with Vite
 # Stage 2: Serve with nginx (lightweight, production-grade)
 
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json ./
+
+# Copy config files first for better caching
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY vite.config.js ./
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+COPY components.json ./
+
+# Install all dependencies (including dev dependencies for build)
 RUN npm install
-COPY . .
+
+# Copy source code
+COPY index.html ./
+COPY src/ ./src/
+
+# Build the production bundle
 RUN npm run build
 
 FROM nginx:alpine

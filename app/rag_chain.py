@@ -67,6 +67,28 @@ class RAGChain:
             for r in retrieved
         ]
 
+    @staticmethod
+    def _clean_response(text: str, max_chars: int = 500) -> str:
+        """Strip markdown special characters and enforce character limit."""
+        import re
+        # Remove markdown: *, #, `, ~~, >, etc.
+        text = re.sub(r'[*#`~>]', '', text)
+        # Collapse multiple blank lines into one
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = text.strip()
+        # Hard cap at max_chars, break at last sentence or word boundary
+        if len(text) > max_chars:
+            truncated = text[:max_chars]
+            # Try to break at last period
+            last_period = truncated.rfind('.')
+            if last_period > max_chars * 0.5:
+                text = truncated[:last_period + 1]
+            else:
+                # Break at last space
+                last_space = truncated.rfind(' ')
+                text = truncated[:last_space] + '...' if last_space > 0 else truncated
+        return text
+
     # ── Multi-turn chat ──────────────────────────────────────────────
 
     def ask(
@@ -126,6 +148,9 @@ class RAGChain:
         )
 
         answer_text = message.content[0].text
+
+        # ── 4b. Clean response: strip markdown chars, cap at 500 chars
+        answer_text = self._clean_response(answer_text)
 
         # ── 5. Package response ─────────────────────────────────────
         return RAGResponse(

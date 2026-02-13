@@ -13,6 +13,8 @@ env/
 
 # Environment secrets
 .env
+scripts/aws_config.env
+scripts/aws_resources.env
 
 # ChromaDB persistent storage (regenerated from raw docs)
 app/data/chroma_db/
@@ -23,6 +25,14 @@ app/data/chroma_db/
 *.swp
 *.swo
 
+# Node
+node_modules/
+frontend/dist/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Large archives
+*.zip
+*.tar.gz

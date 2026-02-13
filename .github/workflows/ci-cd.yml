@@ -11,6 +11,9 @@ env:
   ECR_REPOSITORY_BACKEND: valor-assist-backend
   ECR_REPOSITORY_FRONTEND: valor-assist-frontend
 
+permissions:
+  contents: read
+
 jobs:
   # ── Lint and Test ───────────────────────────────────────────────────
   test:

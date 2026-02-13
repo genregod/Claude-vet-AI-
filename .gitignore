@@ -13,6 +13,8 @@ env/
 
 # Environment secrets
 .env
+scripts/aws_config.env
+scripts/aws_resources.env
 
 # ChromaDB persistent storage (regenerated from raw docs)
 app/data/chroma_db/

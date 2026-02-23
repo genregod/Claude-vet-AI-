@@ -30,6 +30,7 @@ from app.auth import (
     AuthProvider,
     IDmeClient,
     LivenessChecker,
+    TokenPair,
     UserProfile,
     UserStore,
     VerificationLevel,
@@ -39,7 +40,7 @@ from app.auth import (
 )
 from app.config import settings
 from app.pii_shield import audit_log, field_encryptor, AuditEntry
-from app.va_integration import VALighthouseClient
+from app.va_integration import VALighthouseClient, VACredentials
 
 logger = logging.getLogger(__name__)
 
@@ -391,7 +392,7 @@ async def va_callback(request: OAuthCallbackRequest):
 
     # Encrypt and temporarily store VA credentials
     # (never persisted to disk — held in memory during active session only)
-    field_encryptor.encrypt_field(
+    encrypted_token = field_encryptor.encrypt_field(
         va_creds.va_access_token,
         "token",
         user_id=user_id,
@@ -408,10 +409,7 @@ async def va_callback(request: OAuthCallbackRequest):
 
     return {
         "status": "success",
-        "message": (
-            "VA.gov access authorized. "
-            "Your records are now available for case evaluation."
-        ),
+        "message": "VA.gov access authorized. Your records are now available for case evaluation.",
         "scopes": va_creds.scopes,
     }
 
@@ -452,10 +450,7 @@ async def submit_consent(
     state_key = f"consent:{submission.challenge_id}"
     challenge_data = _auth_state_store.pop(state_key, None)
     if challenge_data is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired consent challenge.",
-        )
+        raise HTTPException(status_code=400, detail="Invalid or expired consent challenge.")
 
     if challenge_data["user_id"] != current_user.user_id:
         raise HTTPException(status_code=403, detail="Consent challenge mismatch.")

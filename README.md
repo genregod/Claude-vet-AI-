@@ -1,214 +1,207 @@
 # Valor Assist — AI Veterans Claims Assistant
 
-An AI-powered backend that helps U.S. military veterans navigate VA disability
-claims, appeals, and 38 CFR regulations. Built with FastAPI, Claude 3.5 Sonnet,
+An AI-powered assistant that helps U.S. military veterans navigate VA disability
+claims, appeals, and 38 CFR regulations. Built with **FastAPI** (Python) on the
+backend and **Vite/React** (TypeScript) on the frontend, using Claude 3.5 Sonnet
 and a Retrieval-Augmented Generation (RAG) pipeline grounded in real legal texts.
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Frontend (React / Next.js)                                     │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────────────┐ │
-│  │ Chat     │  │ Quick Action │  │ Free Case Evaluation Form │ │
-│  │ Widget   │  │ Buttons      │  │ (Branch / Rating / Issue) │ │
-│  └────┬─────┘  └──────┬───────┘  └────────────┬──────────────┘ │
-└───────┼────────────────┼───────────────────────┼────────────────┘
-        │                │                       │
-        ▼                ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  FastAPI Server (app/server.py)                                 │
-│                                                                 │
-│  POST /chat              ← multi-turn Q&A                       │
-│  POST /chat/quick-action ← pre-built expert queries             │
-│  POST /chat/session      ← create encrypted session             │
-│  POST /evaluate          ← case intake evaluation               │
-│  POST /upload            ← veteran document upload              │
-│  POST /ingest            ← admin: re-ingest knowledge base      │
-│  GET  /health            ← liveness probe                       │
-│  GET  /stats             ← system statistics                    │
-│                                                                 │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
-│  │ Sessions    │  │ Rate Limiter │  │ CORS + Security Headers│ │
-│  │ (Fernet    │  │ (per-IP)     │  │ (HSTS, XSS, CSP)      │ │
-│  │  encrypted) │  │              │  │                        │ │
-│  └─────────────┘  └──────────────┘  └────────────────────────┘ │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  RAG Chain (app/rag_chain.py)                                   │
-│                                                                 │
-│  1. Semantic search → ChromaDB (top-k relevant chunks)          │
-│  2. Context assembly → XML-tagged system prompt                 │
-│  3. Claude 3.5 Sonnet → cited, empathetic answer                │
-│                                                                 │
-│  ┌──────────────┐          ┌──────────────────────────────────┐ │
-│  │ Vector Store │          │ Anthropic API (Claude 3.5 Sonnet)│ │
-│  │ (ChromaDB)   │          │ system prompt uses <role>,       │ │
-│  │              │          │ <rules>, <context>, <format>     │ │
-│  └──────┬───────┘          └──────────────────────────────────┘ │
-│         │                                                       │
-│  ┌──────┴───────────────────────────────────────────────────┐   │
-│  │ Embeddings: Voyage AI voyage-law-2 OR HuggingFace        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Knowledge Base (app/data/raw/)                                 │
-│                                                                 │
-│  Source Types:                                                  │
-│  • 38_CFR          — Title 38 Code of Federal Regulations       │
-│  • M21-1_Manual    — VA Adjudication Procedures Manual          │
-│  • BVA_Decision    — Board of Veterans' Appeals decisions        │
-│  • US_Code         — United States Code (Title 38)              │
-│  • BCMR            — Board for Correction of Military Records   │
-│  • DRB             — Discharge Review Board proceedings         │
-│  • COVA            — Court of Appeals for Veterans Claims       │
-│  • VA_Form         — VA form instructions and guidance          │
-└─────────────────────────────────────────────────────────────────┘
-```
+---
 
 ## Project Structure
 
 ```
-app/
-├── config.py              Settings (API keys, models, security, sessions)
-├── server.py              FastAPI app — all endpoints
-├── rag_chain.py           RAG orchestration (retrieve → prompt → Claude)
-├── prompts.py             XML-tagged system prompts + quick actions
-├── vector_store.py        Embedding + ChromaDB (Voyage AI / HuggingFace)
-├── ingest.py              Document ingestion, chunking, metadata tagging
-├── sessions.py            Encrypted conversation session management
-├── middleware.py           CORS, rate limiting, security headers
-├── utils/
-│   └── text_cleaning.py   PII redaction, header/footer removal
-└── data/
-    ├── raw/               Legal source documents (.txt, .md)
-    ├── chroma_db/         ChromaDB persistent storage (gitignored)
-    └── uploads/           Veteran-uploaded documents (gitignored)
-
-scripts/
-└── run_ingest.py          Standalone ingestion runner
-
-infrastructure/
-└── aws-architecture.md    AWS production deployment guide
+.
+├── app/                        # FastAPI backend
+│   ├── server.py               # App entry point — all endpoints
+│   ├── config.py               # Settings (pydantic-settings, reads .env)
+│   ├── rag_chain.py            # RAG: retrieve → prompt → Claude
+│   ├── prompts.py              # System prompts and quick actions
+│   ├── vector_store.py         # ChromaDB + embeddings
+│   ├── ingest.py               # Document ingestion / chunking
+│   ├── sessions.py             # Encrypted session management
+│   ├── auth.py / auth_routes.py # ID.me + VA OAuth
+│   ├── claim_routes.py         # Claim submission routes
+│   ├── claims_evaluator.py     # AI claim evaluation
+│   ├── records_extractor.py    # Military records extraction
+│   ├── middleware.py           # CORS, rate limiting, security headers
+│   ├── pii_shield.py           # PII redaction
+│   ├── va_integration.py       # VA.gov Lighthouse API client
+│   └── data/
+│       ├── raw/                # Legal source documents (.txt, .md)
+│       ├── chroma_db/          # ChromaDB storage (gitignored)
+│       └── uploads/            # Veteran uploads (gitignored)
+├── frontend/                   # Vite + React (TypeScript) frontend
+│   ├── src/
+│   │   ├── main.tsx            # App entry point
+│   │   ├── App.tsx             # Root component + router
+│   │   ├── pages/              # Route-level page components
+│   │   ├── components/         # Shared UI components (shadcn/ui)
+│   │   ├── lib/                # API client, query client, utilities
+│   │   └── hooks/              # Custom React hooks
+│   ├── package.json
+│   └── vite.config.js
+├── docs/
+│   └── references/             # Reference PDFs (Docker, VA Dev API)
+├── scripts/
+│   └── run_ingest.py           # Standalone knowledge-base ingestion
+├── infrastructure/
+│   └── aws-architecture.md     # AWS production deployment guide
+├── .devcontainer/
+│   └── devcontainer.json       # GitHub Codespaces / VS Code Dev Container
+├── Dockerfile                  # Backend production image
+├── frontend/Dockerfile         # Frontend production image (nginx)
+├── docker-compose.yml          # Full-stack local development
+├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Python tool config (ruff)
+└── .env.example                # Environment variable template
 ```
 
-## Quick Start
+---
 
-### 1. Install Dependencies
+## Quick Start — Local Development
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+### Prerequisites
 
-### 2. Configure Environment
+- Python 3.11+
+- Node.js 18+
+- An **Anthropic API key** — set as `ANTHROPIC_API_KEY`
+
+### 1. Clone and configure environment
 
 ```bash
 cp .env.example .env
-# Edit .env — set ANTHROPIC_API_KEY (required)
+# Edit .env — at minimum set ANTHROPIC_API_KEY
 ```
 
-### 3. Ingest the Knowledge Base
+### 2. Backend (FastAPI)
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Optional: ingest knowledge base documents
 python -m scripts.run_ingest
-```
 
-This reads all documents from `app/data/raw/`, cleans them (PII redaction,
-header removal), chunks them (~400 words with 50-word overlap), and stores
-the embeddings in ChromaDB.
-
-### 4. Start the Server
-
-```bash
-python -m app.server
+# Start the API server
+uvicorn app.server:app --reload --port 8000
 # API docs: http://localhost:8000/docs
 ```
 
-### 5. Docker
+### 3. Frontend (Vite / React)
 
 ```bash
+cd frontend
+npm install
+npm run dev
+# App: http://localhost:5173
+```
+
+---
+
+## Docker Compose (full stack)
+
+Run the entire stack (backend + frontend nginx) with a single command:
+
+```bash
+# Copy and fill in your .env first
+cp .env.example .env
+
 docker-compose up --build
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:8000/docs
 ```
 
-## API Endpoints
+---
 
-### Chat Widget
+## GitHub Codespaces
+
+This repo ships with a `.devcontainer` configuration that installs Python 3.11
+and Node 20, forwards ports 8000 / 5173 / 3000, and runs post-create installs
+automatically.
+
+### Required Codespaces Secret
+
+Set the following in your repository / Codespaces settings
+(**Settings → Secrets and variables → Codespaces**):
+
+| Secret name         | Description                           |
+|---------------------|---------------------------------------|
+| `ANTHROPIC_API_KEY` | Your Anthropic API key (required)     |
+| `VOYAGE_API_KEY`    | Voyage AI key (optional, embeddings)  |
+
+Codespaces automatically injects these as environment variables; no `.env` file
+is needed when running in Codespaces.
+
+### Start services inside Codespaces
 
 ```bash
-# Create a session (for multi-turn conversation)
-curl -X POST http://localhost:8000/chat/session
+# Terminal 1 — Backend
+uvicorn app.server:app --reload --port 8000
 
-# Ask a question (with session for continuity)
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "How do I appeal a PTSD denial?",
-    "session_id": "<session_id_from_above>"
-  }'
-
-# Quick action (chat widget buttons)
-curl -X POST http://localhost:8000/chat/quick-action \
-  -H "Content-Type: application/json" \
-  -d '{"action": "learn_appeals", "session_id": "<session_id>"}'
+# Terminal 2 — Frontend
+cd frontend && npm run dev -- --port 5173
 ```
 
-### Case Evaluation Form
+---
 
-```bash
-curl -X POST http://localhost:8000/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service_branch": "Army",
-    "current_rating": "30%",
-    "primary_concerns": "PTSD from combat deployment, tinnitus, and knee injury",
-    "additional_details": "Deployed to Afghanistan 2012-2013. Previously denied for PTSD in 2019."
-  }'
-```
+## API Overview
 
-### Document Upload
+| Method | Path                  | Description                        |
+|--------|-----------------------|------------------------------------|
+| `GET`  | `/health`             | Liveness probe                     |
+| `GET`  | `/stats`              | System statistics                  |
+| `POST` | `/chat/session`       | Create an encrypted session        |
+| `POST` | `/chat`               | Multi-turn Q&A (RAG + Claude)      |
+| `POST` | `/chat/quick-action`  | Pre-built expert queries           |
+| `POST` | `/evaluate`           | Free case evaluation               |
+| `POST` | `/upload`             | Veteran document upload            |
+| `POST` | `/ingest`             | Admin: re-ingest knowledge base    |
+| `POST` | `/auth/idme/login`    | ID.me OAuth login                  |
+| `POST` | `/claims/start`       | Start a new VA claim               |
 
-```bash
-curl -X POST http://localhost:8000/upload \
-  -F "file=@my_medical_records.txt" \
-  -F "source_type=General"
-```
+Full interactive docs available at `http://localhost:8000/docs` when running locally.
+
+---
+
+## Environment Variables
+
+See `.env.example` for all available configuration options.
+
+| Variable             | Required | Description                                    |
+|----------------------|----------|------------------------------------------------|
+| `ANTHROPIC_API_KEY`  | ✅       | Claude API key                                 |
+| `VOYAGE_API_KEY`     | ❌       | Voyage AI key (if `EMBEDDING_PROVIDER=voyageai`) |
+| `EMBEDDING_PROVIDER` | ❌       | `voyageai` (default) or `huggingface`          |
+| `ENCRYPTION_KEY`     | ❌       | Fernet key for session encryption              |
+| `JWT_SECRET_KEY`     | ❌       | JWT signing secret                             |
+| `IDME_CLIENT_ID`     | ❌       | ID.me OAuth client ID                          |
+| `IDME_CLIENT_SECRET` | ❌       | ID.me OAuth client secret                      |
+| `VA_API_KEY`         | ❌       | VA.gov Lighthouse API key                      |
+
+---
 
 ## Security
 
-- **PII Redaction**: All ingested documents pass through automatic PII stripping
-  (SSNs, VA file numbers, phone numbers, DOBs, emails)
-- **Session Encryption**: Conversation history encrypted at rest with Fernet (AES-128-CBC)
-- **CORS**: Configurable allowed origins (locked to your frontend domain in production)
-- **Rate Limiting**: Per-IP sliding window (default: 30 requests/minute)
-- **Security Headers**: HSTS, X-Frame-Options, X-Content-Type-Options, CSP
-- **File Upload Validation**: Extension whitelist + size limits
+- **PII Redaction** — SSNs, VA file numbers, phone numbers, DOBs, emails are stripped at ingest time
+- **Session Encryption** — Conversation history encrypted at rest (Fernet / AES-128-CBC)
+- **CORS** — Configurable allowed origins
+- **Rate Limiting** — Per-IP sliding window (default: 30 requests/minute)
+- **Security Headers** — HSTS, X-Frame-Options, X-Content-Type-Options, CSP
+- **File Upload Validation** — Extension whitelist + size limits
 
-## Adding Legal Documents
+---
 
-Place `.txt` or `.md` files in `app/data/raw/` using these naming conventions
-for automatic source-type tagging:
+## Reference Documents
 
-| Filename contains | Tagged as       |
-|-------------------|-----------------|
-| `38_cfr`, `cfr`   | `38_CFR`        |
-| `m21-1`, `m21`    | `M21-1_Manual`  |
-| `bva`, `decision` | `BVA_Decision`  |
-| `usc`, `us_code`  | `US_Code`       |
-| `bcmr`            | `BCMR`          |
-| `drb`             | `DRB`           |
-| `cova`, `cavc`    | `COVA`          |
-| `va_form`         | `VA_Form`       |
-| *(anything else)*  | `General`       |
+Reference PDFs are stored under `docs/references/`:
 
-After adding files, run ingestion: `python -m scripts.run_ingest` or `POST /ingest`.
+- [`docs/references/dckr.pdf`](docs/references/dckr.pdf) — Docker reference
+- [`docs/references/vadevapi.pdf`](docs/references/vadevapi.pdf) — VA Developer API reference
+
+---
 
 ## AWS Deployment
 
-See `infrastructure/aws-architecture.md` for the full production architecture
-(ECS Fargate, DynamoDB sessions, S3 document storage, WAF, CloudFront).
+See [`infrastructure/aws-architecture.md`](infrastructure/aws-architecture.md) for the full production
+architecture (ECS Fargate, DynamoDB sessions, S3 document storage, WAF, CloudFront).

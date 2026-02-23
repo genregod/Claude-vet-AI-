@@ -1,0 +1,44 @@
+{
+  "name": "Valor Assist Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+
+  "forwardPorts": [8000, 5173, 3000],
+
+  "portsAttributes": {
+    "8000": { "label": "FastAPI Backend" },
+    "5173": { "label": "Vite Dev Server" },
+    "3000": { "label": "Frontend (Docker/nginx)" }
+  },
+
+  "postCreateCommand": "pip install -r requirements.txt && cd frontend && npm install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "[python]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "VOYAGE_API_KEY": "${localEnv:VOYAGE_API_KEY}"
+  }
+}

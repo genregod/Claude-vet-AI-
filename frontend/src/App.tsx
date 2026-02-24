@@ -3,12 +3,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
-import { HomePage } from "@/pages/HomePage";
-import { ChatPage } from "@/pages/ChatPage";
-import { EvaluatePage } from "@/pages/EvaluatePage";
-import { StartClaimPage } from "@/pages/StartClaimPage";
-import { HealthCheckPage } from "@/pages/HealthCheck";
-import { NotFoundPage } from "@/pages/NotFound";
+import { HomePage } from "@/pages/HomePage.tsx";
+import { ChatPage } from "@/pages/ChatPage.tsx";
+import { EvaluatePage } from "@/pages/EvaluatePage.tsx";
+import { StartClaimPage } from "@/pages/StartClaimPage.tsx";
+import { HealthCheckPage } from "@/pages/HealthCheck.tsx";
+import { NotFoundPage } from "@/pages/NotFound.tsx";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 
 function ErrorFallback({ error }: FallbackProps) {

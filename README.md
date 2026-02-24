@@ -205,3 +205,22 @@ Reference PDFs are stored under `docs/references/`:
 
 See [`infrastructure/aws-architecture.md`](infrastructure/aws-architecture.md) for the full production
 architecture (ECS Fargate, DynamoDB sessions, S3 document storage, WAF, CloudFront).
+
+### GitHub Actions credentials required for CI/CD deploy
+
+Yes — to allow the `.github/workflows/ci-cd.yml` pipeline to build, push, and deploy to AWS,
+configure these **repository secrets**:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The IAM user/role behind those credentials must be allowed to:
+- Authenticate to ECR and push images to:
+  - `valor-assist-backend`
+  - `valor-assist-frontend`
+- Update and wait on ECS services:
+  - cluster `valor-assist-cluster`
+  - services `valor-assist-backend` and `valor-assist-frontend`
+
+Also ensure those ECR repositories and ECS cluster/services already exist in `us-east-1`
+(or update `.github/workflows/ci-cd.yml` to match your AWS names/region).

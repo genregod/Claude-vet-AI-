@@ -208,7 +208,7 @@ architecture (ECS Fargate, DynamoDB sessions, S3 document storage, WAF, CloudFro
 
 ### GitHub Actions credentials required for CI/CD deploy
 
-Yes — to allow the `.github/workflows/ci-cd.yml` pipeline to build, push, and deploy to AWS,
+To allow the `.github/workflows/ci-cd.yml` pipeline to build, push, and deploy to AWS,
 configure these **repository secrets**:
 
 - `AWS_ACCESS_KEY_ID`

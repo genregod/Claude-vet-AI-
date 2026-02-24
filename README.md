@@ -217,6 +217,14 @@ This repository is configured to assume:
   - Example value from your setup:
     - `arn:aws:iam::<account-id>:role/github-actions-deployment-role`
   - Replace `<account-id>` with your 12-digit AWS account ID.
+- GitHub **Repository Variable**: `ECS_TASK_EXECUTION_ROLE_ARN`
+  - Example value:
+    - `arn:aws:iam::<account-id>:role/ecsTaskExecutionRole`
+- Optional GitHub **Repository Variables** (if you do not want default VPC auto-discovery):
+  - `ECS_SUBNET_IDS` (comma-separated subnet IDs)
+  - `ECS_SECURITY_GROUP_ID`
+
+These should be configured under **Settings → Secrets and variables → Actions → Variables** (not Secrets).
 
 No long-lived `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` are required in GitHub secrets.
 
@@ -228,5 +236,12 @@ The IAM role must be allowed to:
   - cluster `valor-assist-cluster`
   - services `valor-assist-backend` and `valor-assist-frontend`
 
-Also ensure those ECR repositories and ECS cluster/services already exist in `us-east-1`
-(or update `.github/workflows/ci-cd.yml` to match your AWS names/region).
+The pipeline will now automatically create missing AWS deployment resources when possible:
+- ECR repositories (`valor-assist-backend`, `valor-assist-frontend`)
+- ECS cluster (`valor-assist-cluster`)
+- ECS services (`valor-assist-backend`, `valor-assist-frontend`) using default VPC/subnets/security group
+
+By default, ECS services are created with `assignPublicIp=ENABLED` in the CI workflow.
+Set `ECS_ASSIGN_PUBLIC_IP` in `.github/workflows/ci-cd.yml` to `DISABLED` if your deployment uses private subnets/NAT.
+
+Ensure your deployment region and names match `.github/workflows/ci-cd.yml` (defaults to `us-east-1`).

@@ -11,6 +11,16 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY_BACKEND: valor-assist-backend
   ECR_REPOSITORY_FRONTEND: valor-assist-frontend
+  ECS_CLUSTER: valor-assist-cluster
+  ECS_SERVICE_BACKEND: valor-assist-backend
+  ECS_SERVICE_FRONTEND: valor-assist-frontend
+  ECS_TASK_FAMILY_BACKEND: valor-assist-backend
+  ECS_TASK_FAMILY_FRONTEND: valor-assist-frontend
+  ECS_BACKEND_CPU: "1024"
+  ECS_BACKEND_MEMORY: "2048"
+  ECS_FRONTEND_CPU: "512"
+  ECS_FRONTEND_MEMORY: "1024"
+  ECS_ASSIGN_PUBLIC_IP: ENABLED
 
 jobs:
   # ── Lint and Test ───────────────────────────────────────────────────
@@ -75,6 +85,13 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repositories exist
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY_BACKEND" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY_BACKEND"
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY_FRONTEND" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY_FRONTEND"
       
       - name: Build and push backend image
         env:
@@ -115,20 +132,102 @@ jobs:
           role-session-name: github-actions-ecs-deploy
           aws-region: ${{ env.AWS_REGION }}
       
+      - name: Ensure ECS cluster exists
+        run: |
+          CLUSTER_STATUS=$(aws ecs describe-clusters --clusters "$ECS_CLUSTER" --query 'clusters[0].status' --output text 2>/dev/null || echo "MISSING")
+          if [ "$CLUSTER_STATUS" = "MISSING" ] || [ "$CLUSTER_STATUS" = "None" ]; then
+            aws ecs create-cluster --cluster-name "$ECS_CLUSTER"
+          fi
+
       - name: Deploy to ECS
         run: |
-          aws ecs update-service \
-            --cluster valor-assist-cluster \
-            --service valor-assist-backend \
-            --force-new-deployment
-          
-          aws ecs update-service \
-            --cluster valor-assist-cluster \
-            --service valor-assist-frontend \
-            --force-new-deployment
+          set -euo pipefail
+
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          BACKEND_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_BACKEND}:${GITHUB_SHA}"
+          FRONTEND_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_FRONTEND}:${GITHUB_SHA}"
+
+          BACKEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family "$ECS_TASK_FAMILY_BACKEND" \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "$ECS_BACKEND_CPU" \
+            --memory "$ECS_BACKEND_MEMORY" \
+            --execution-role-arn "${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}" \
+            --container-definitions "[{\"name\":\"backend\",\"image\":\"${BACKEND_IMAGE}\",\"essential\":true,\"portMappings\":[{\"containerPort\":8000,\"protocol\":\"tcp\"}]}]" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family "$ECS_TASK_FAMILY_FRONTEND" \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "$ECS_FRONTEND_CPU" \
+            --memory "$ECS_FRONTEND_MEMORY" \
+            --execution-role-arn "${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}" \
+            --container-definitions "[{\"name\":\"frontend\",\"image\":\"${FRONTEND_IMAGE}\",\"essential\":true,\"portMappings\":[{\"containerPort\":80,\"protocol\":\"tcp\"}]}]" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          CUSTOM_SUBNETS="${{ vars.ECS_SUBNET_IDS }}"
+          CUSTOM_SECURITY_GROUP="${{ vars.ECS_SECURITY_GROUP_ID }}"
+          if [ -n "$CUSTOM_SUBNETS" ] && [ -n "$CUSTOM_SECURITY_GROUP" ]; then
+            SUBNETS_CSV="$CUSTOM_SUBNETS"
+            SECURITY_GROUP_ID="$CUSTOM_SECURITY_GROUP"
+          else
+            DEFAULT_VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)
+            if [ -z "$DEFAULT_VPC_ID" ] || [ "$DEFAULT_VPC_ID" = "None" ]; then
+              echo "No default VPC found. Set repository variables ECS_SUBNET_IDS and ECS_SECURITY_GROUP_ID."
+              exit 1
+            fi
+            SUBNETS_CSV=$(aws ec2 describe-subnets --filters Name=vpc-id,Values="$DEFAULT_VPC_ID" --query "join(',',Subnets[].SubnetId)" --output text)
+            SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values="$DEFAULT_VPC_ID" Name=group-name,Values=default --query 'SecurityGroups[0].GroupId' --output text)
+          fi
+          if [ -z "$SUBNETS_CSV" ] || [ "$SUBNETS_CSV" = "None" ] || [ -z "$SECURITY_GROUP_ID" ] || [ "$SECURITY_GROUP_ID" = "None" ]; then
+            echo "Could not determine ECS networking. Set ECS_SUBNET_IDS and ECS_SECURITY_GROUP_ID repository variables."
+            exit 1
+          fi
+          NETWORK_CONFIG=$(python -c 'import json, os; print(json.dumps({"awsvpcConfiguration":{"subnets":[s for s in os.environ["SUBNETS_CSV"].split(",") if s],"securityGroups":[os.environ["SECURITY_GROUP_ID"]],"assignPublicIp":os.environ["ECS_ASSIGN_PUBLIC_IP"]}}))')
+
+          BACKEND_SERVICE_STATUS=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_BACKEND" --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+          if [ "$BACKEND_SERVICE_STATUS" = "None" ] || [ "$BACKEND_SERVICE_STATUS" = "MISSING" ]; then
+            aws ecs create-service \
+              --cluster "$ECS_CLUSTER" \
+              --service-name "$ECS_SERVICE_BACKEND" \
+              --task-definition "$BACKEND_TASK_DEF_ARN" \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "$NETWORK_CONFIG"
+          else
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$ECS_SERVICE_BACKEND" \
+              --task-definition "$BACKEND_TASK_DEF_ARN" \
+              --network-configuration "$NETWORK_CONFIG" \
+              --force-new-deployment
+          fi
+
+          FRONTEND_SERVICE_STATUS=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_FRONTEND" --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
+          if [ "$FRONTEND_SERVICE_STATUS" = "None" ] || [ "$FRONTEND_SERVICE_STATUS" = "MISSING" ]; then
+            aws ecs create-service \
+              --cluster "$ECS_CLUSTER" \
+              --service-name "$ECS_SERVICE_FRONTEND" \
+              --task-definition "$FRONTEND_TASK_DEF_ARN" \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "$NETWORK_CONFIG"
+          else
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$ECS_SERVICE_FRONTEND" \
+              --task-definition "$FRONTEND_TASK_DEF_ARN" \
+              --network-configuration "$NETWORK_CONFIG" \
+              --force-new-deployment
+          fi
       
       - name: Wait for deployment
         run: |
           aws ecs wait services-stable \
-            --cluster valor-assist-cluster \
-            --services valor-assist-backend valor-assist-frontend
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_FRONTEND"

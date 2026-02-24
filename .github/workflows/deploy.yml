@@ -64,7 +64,7 @@ jobs:
         run: npm run build --prefix frontend
 
   # ── Build and Push Docker Images ────────────────────────────────────
-build-and-push:
+  build-and-push:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
@@ -58,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
     
     steps:
       - uses: actions/checkout@v4

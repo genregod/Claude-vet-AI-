@@ -213,7 +213,7 @@ configure an IAM role trust for GitHub OIDC and use that role in the workflow.
 
 This repository is configured to assume:
 
-- GitHub **Repository Variable**: `AWS_ROLE_TO_ASSUME`
+- GitHub **Repository Secret**: `AWS_ROLE_TO_ASSUME`
   - Example value from your setup:
     - `arn:aws:iam::<account-id>:role/github-actions-deployment-role`
   - Replace `<account-id>` with your 12-digit AWS account ID.
@@ -224,7 +224,8 @@ This repository is configured to assume:
   - `ECS_SUBNET_IDS` (comma-separated subnet IDs)
   - `ECS_SECURITY_GROUP_ID`
 
-These should be configured under **Settings → Secrets and variables → Actions → Variables** (not Secrets).
+Configure `AWS_ROLE_TO_ASSUME` under **Settings → Secrets and variables → Actions → Secrets**.
+You can keep optional ECS values under **Actions → Variables**.
 
 No long-lived `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` are required in GitHub secrets.
 

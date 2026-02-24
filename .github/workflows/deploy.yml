@@ -1,48 +1,198 @@
-name: Deploy to AWS ECS
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]  # Change to your default branch if different
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: valor-assist-backend
-  ECS_SERVICE: valor-assist-prod-backend-svc
+  ECR_REPOSITORY_BACKEND: valor-assist-backend
+  ECR_REPOSITORY_FRONTEND: valor-assist-frontend
   ECS_CLUSTER: valor-assist-prod-cluster
+  ECS_SERVICE_BACKEND: valor-assist-prod-backend-svc
+  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc  # You'll need to create this
+  ECS_TASK_FAMILY_BACKEND: valor-assist-prod-backend
+  ECS_TASK_FAMILY_FRONTEND: valor-assist-prod-frontend  # You'll need to create this
+  ECS_BACKEND_CPU: "1024"  # Increased from 512
+  ECS_BACKEND_MEMORY: "2048"  # Increased from 1024
+  ECS_FRONTEND_CPU: "512"
+  ECS_FRONTEND_MEMORY: "1024"
+  ECS_ASSIGN_PUBLIC_IP: ENABLED
 
 jobs:
-  deploy:
-    name: Deploy
+  # ── Lint and Test ───────────────────────────────────────────────────
+  test:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+      
+      - name: Run Python linting
+        run: |
+          python -m pip install ruff
+          ruff check app/
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      
+      - name: TypeScript check
+        run: npm run check --prefix frontend
+      
+      - name: Build frontend
+        run: npm run build --prefix frontend
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+  # ── Build and Push Docker Images ────────────────────────────────────
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
+      
+      - name: Build and push frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG ./frontend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
 
-    - name: Build, tag, and push image to Amazon ECR
-      id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+  # ── Deploy to AWS ECS ───────────────────────────────────────────────
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    if: github.ref == 'refs/heads/main'  # Only deploy from main branch
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Force ECS service update
-      run: |
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --force-new-deployment
-        
+      - name: Deploy Backend to ECS
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          BACKEND_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_BACKEND}:${GITHUB_SHA}"
+
+          # Register new task definition for backend
+          BACKEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family "$ECS_TASK_FAMILY_BACKEND" \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "$ECS_BACKEND_CPU" \
+            --memory "$ECS_BACKEND_MEMORY" \
+            --execution-role-arn "arn:aws:iam::973028704465:role/valor-assist-prod-ecs-exec" \
+            --task-role-arn "arn:aws:iam::973028704465:role/valor-assist-prod-ecs-task" \
+            --container-definitions "[{\"name\":\"backend\",\"image\":\"${BACKEND_IMAGE}\",\"essential\":true,\"portMappings\":[{\"containerPort\":8000,\"protocol\":\"tcp\"}],\"environment\":[{\"name\":\"ENVIRONMENT\",\"value\":\"prod\"}],\"logConfiguration\":{\"logDriver\":\"awslogs\",\"options\":{\"awslogs-group\":\"/ecs/valor-assist-prod\",\"awslogs-region\":\"us-east-1\",\"awslogs-stream-prefix\":\"backend\"}}}]" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          # Update backend service
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_BACKEND" \
+            --task-definition "$BACKEND_TASK_DEF_ARN"
+
+      - name: Deploy Frontend to ECS
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          FRONTEND_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY_FRONTEND}:${GITHUB_SHA}"
+
+          # Register new task definition for frontend
+          FRONTEND_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family "$ECS_TASK_FAMILY_FRONTEND" \
+            --network-mode awsvpc \
+            --requires-compatibilities FARGATE \
+            --cpu "$ECS_FRONTEND_CPU" \
+            --memory "$ECS_FRONTEND_MEMORY" \
+            --execution-role-arn "arn:aws:iam::973028704465:role/valor-assist-prod-ecs-exec" \
+            --task-role-arn "arn:aws:iam::973028704465:role/valor-assist-prod-ecs-task" \
+            --container-definitions "[{\"name\":\"frontend\",\"image\":\"${FRONTEND_IMAGE}\",\"essential\":true,\"portMappings\":[{\"containerPort\":80,\"protocol\":\"tcp\"}],\"logConfiguration\":{\"logDriver\":\"awslogs\",\"options\":{\"awslogs-group\":\"/ecs/valor-assist-prod\",\"awslogs-region\":\"us-east-1\",\"awslogs-stream-prefix\":\"frontend\"}}}]" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          # Check if frontend service exists, create if not
+          if ! aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_FRONTEND" >/dev/null 2>&1; then
+            echo "Creating frontend service..."
+            aws ecs create-service \
+              --cluster "$ECS_CLUSTER" \
+              --service-name "$ECS_SERVICE_FRONTEND" \
+              --task-definition "$FRONTEND_TASK_DEF_ARN" \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0834f95b72e04cb73,subnet-07b430c38785b9a5b],securityGroups=[sg-0ef21079c138dc826],assignPublicIp=ENABLED}"
+          else
+            echo "Updating existing frontend service..."
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$ECS_SERVICE_FRONTEND" \
+              --task-definition "$FRONTEND_TASK_DEF_ARN"
+          fi
+
+      - name: Wait for deployment completion
+        run: |
+          echo "Waiting for backend deployment to complete..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_BACKEND"
+          
+          echo "Waiting for frontend deployment to complete..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_FRONTEND"
+          
+          echo "✅ Deployment completed successfully!"

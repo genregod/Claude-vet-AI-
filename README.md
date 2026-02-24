@@ -213,7 +213,10 @@ configure an IAM role trust for GitHub OIDC and use that role in the workflow.
 
 This repository is configured to assume:
 
-- `arn:aws:iam::973028704465:role/github-actions-deployment-role`
+- GitHub **Repository Variable**: `AWS_ROLE_TO_ASSUME`
+  - Example value from your setup:
+    - `arn:aws:iam::<account-id>:role/github-actions-deployment-role`
+  - Replace `<account-id>` with your 12-digit AWS account ID.
 
 No long-lived `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` are required in GitHub secrets.
 

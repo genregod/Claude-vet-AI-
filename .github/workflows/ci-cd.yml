@@ -34,10 +34,10 @@ jobs:
           context: .
           push: true
           tags: |
-            myrepo/backend:latest
-            myrepo/backend:${{ github.sha }}
-            myrepo/frontend:latest
-            myrepo/frontend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:latest
+            ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:${{ github.sha }}
 
       - name: Verification of Backend Docker push
         run: 'echo "Successfully pushed backend image with tags: latest and ${{ github.sha }}"'
@@ -54,5 +54,5 @@ jobs:
 
       - name: Deploy to ECS
         run: |
-          echo "Deploying with task definition referencing the image: myrepo/backend:latest"
-          echo "Deploying with task definition referencing the image: myrepo/frontend:latest"
+          echo "Deploying with task definition referencing the image: ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:latest"
+          echo "Deploying with task definition referencing the image: ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:latest"

@@ -1,0 +1,3 @@
+[submodule "ValorAssist"]
+	path = ValorAssist
+	url = https://github.com/genregod/Valorassist.git

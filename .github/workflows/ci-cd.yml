@@ -35,10 +35,10 @@ jobs:
             myrepo/frontend:${{ github.sha }}
 
       - name: Verification of Backend Docker push
-        run: echo "Successfully pushed backend image with tags: latest and ${{ github.sha }}"
+        run: 'echo "Successfully pushed backend image with tags: latest and ${{ github.sha }}"'
 
       - name: Verification of Frontend Docker push
-        run: echo "Successfully pushed frontend image with tags: latest and ${{ github.sha }}"
+        run: 'echo "Successfully pushed frontend image with tags: latest and ${{ github.sha }}"'
 
   deploy:
     needs: build-and-push

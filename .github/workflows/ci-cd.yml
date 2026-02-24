@@ -34,16 +34,11 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:latest
-            ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:${{ github.sha }}
-            ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:latest
-            ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:${{ github.sha }}
+            genregod/valor-assist-docker:latest
+            genregod/valor-assist-docker:${{ github.sha }}
 
-      - name: Verification of Backend Docker push
-        run: 'echo "Successfully pushed backend image with tags: latest and ${{ github.sha }}"'
-
-      - name: Verification of Frontend Docker push
-        run: 'echo "Successfully pushed frontend image with tags: latest and ${{ github.sha }}"'
+      - name: Verification of Docker image push
+        run: 'echo "Successfully pushed valor-assist-docker image with tags: latest and ${{ github.sha }}"'
 
   deploy:
     needs: build-and-push
@@ -54,5 +49,4 @@ jobs:
 
       - name: Deploy to ECS
         run: |
-          echo "Deploying with task definition referencing the image: ${{ secrets.DOCKER_USERNAME }}/valor-assist-backend:latest"
-          echo "Deploying with task definition referencing the image: ${{ secrets.DOCKER_USERNAME }}/valor-assist-frontend:latest"
+          echo "Deploying with task definition referencing the image: genregod/valor-assist-docker:latest"

@@ -9,7 +9,6 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  AWS_ROLE_TO_ASSUME: arn:aws:iam::973028704465:role/github-actions-deployment-role
   ECR_REPOSITORY_BACKEND: valor-assist-backend
   ECR_REPOSITORY_FRONTEND: valor-assist-frontend
 
@@ -69,7 +68,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           role-session-name: github-actions-ecr-push
           aws-region: ${{ env.AWS_REGION }}
       
@@ -112,7 +111,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
           role-session-name: github-actions-ecs-deploy
           aws-region: ${{ env.AWS_REGION }}
       

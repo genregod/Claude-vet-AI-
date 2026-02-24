@@ -138,7 +138,6 @@ jobs:
           if [ "$CLUSTER_STATUS" = "MISSING" ] || [ "$CLUSTER_STATUS" = "None" ]; then
             aws ecs create-cluster --cluster-name "$ECS_CLUSTER"
           fi
-"executionRoleArn": "arn:aws:iam::973028704465:role/ecsTaskExecutionRole"
 
       - name: Deploy to ECS
         run: |

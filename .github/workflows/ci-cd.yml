@@ -11,11 +11,11 @@ env:
   ECR_REPOSITORY_FRONTEND: valor-assist-frontend
   ECS_CLUSTER: valor-assist-prod-cluster
   ECS_SERVICE_BACKEND: valor-assist-prod-backend-svc
-  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc  # You'll need to create this
+  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc
   ECS_TASK_FAMILY_BACKEND: valor-assist-prod-backend
-  ECS_TASK_FAMILY_FRONTEND: valor-assist-prod-frontend  # You'll need to create this
-  ECS_BACKEND_CPU: "1024"  # Increased from 512
-  ECS_BACKEND_MEMORY: "2048"  # Increased from 1024
+  ECS_TASK_FAMILY_FRONTEND: valor-assist-prod-frontend
+  ECS_BACKEND_CPU: "1024"
+  ECS_BACKEND_MEMORY: "2048"
   ECS_FRONTEND_CPU: "512"
   ECS_FRONTEND_MEMORY: "1024"
   ECS_ASSIGN_PUBLIC_IP: ENABLED
@@ -27,37 +27,51 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    
+    outputs:
+      pushed: ${{ steps.push-backend.outcome == 'success' }}
+
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Build backend image
+        run: docker build -t $ECR_REPOSITORY_BACKEND:${{ github.sha }} .
+
+      - name: Build frontend image
+        run: docker build -t $ECR_REPOSITORY_FRONTEND:${{ github.sha }} ./frontend
+
       - name: Configure AWS credentials
+        id: aws-creds
+        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
+
       - name: Login to Amazon ECR
         id: login-ecr
+        if: ${{ steps.aws-creds.outcome == 'success' }}
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push backend image
+      - name: Tag and push backend image
+        id: push-backend
+        if: ${{ steps.login-ecr.outcome == 'success' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG .
+          docker tag $ECR_REPOSITORY_BACKEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
-      
-      - name: Build and push frontend image
+
+      - name: Tag and push frontend image
+        if: ${{ steps.login-ecr.outcome == 'success' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG ./frontend
+          docker tag $ECR_REPOSITORY_FRONTEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
@@ -69,7 +83,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: github.ref == 'refs/heads/main'  # Only deploy from main branch
+    if: github.ref == 'refs/heads/main' && needs.build-and-push.outputs.pushed == 'true'
     
     steps:
       - uses: actions/checkout@v4

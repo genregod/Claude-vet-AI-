@@ -178,6 +178,7 @@ See `.env.example` for all available configuration options.
 | `IDME_CLIENT_ID`     | ❌       | ID.me OAuth client ID                          |
 | `IDME_CLIENT_SECRET` | ❌       | ID.me OAuth client secret                      |
 | `VA_API_KEY`         | ❌       | VA.gov Lighthouse API key                      |
+| `VITE_API_URL`       | ❌       | Frontend API origin for production builds (e.g., `https://api.yourdomain.com`) |
 
 ---
 

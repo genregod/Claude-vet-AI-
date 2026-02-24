@@ -1,5 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const API_BASE = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -13,8 +15,9 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   // Prepend /api so requests route through the Vite proxy (dev)
-  // and the FastAPI /api prefix (production)
-  const apiUrl = url.startsWith("/api") ? url : `/api${url}`;
+  // and use VITE_API_URL in production deployments when provided.
+  const apiPath = url.startsWith("/api") ? url : `/api${url}`;
+  const apiUrl = API_BASE ? `${API_BASE}${apiPath}` : apiPath;
   const res = await fetch(apiUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},

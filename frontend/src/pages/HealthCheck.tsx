@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 type HealthStatus = {
   service: string;
@@ -20,10 +21,7 @@ type HealthStatus = {
 
 // This function calls the /api/health endpoint on your server
 async function fetchHealthStatus(): Promise<{ checks: HealthStatus[] }> {
-  const res = await fetch("/api/health");
-  if (!res.ok) {
-    throw new Error("Failed to fetch health status from the server.");
-  }
+  const res = await apiRequest("GET", "/health");
   return res.json();
 }
 
@@ -95,4 +93,3 @@ export function HealthCheckPage() {
     </div>
   );
 }
-

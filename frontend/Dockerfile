@@ -20,6 +20,10 @@ RUN npm install
 COPY index.html ./
 COPY src/ ./src/
 
+# Optional API origin for deployed frontend (e.g., https://api.example.com)
+ARG VITE_API_URL=""
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build the production bundle
 RUN npm run build
 

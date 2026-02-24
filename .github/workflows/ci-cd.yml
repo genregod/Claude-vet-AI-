@@ -28,7 +28,7 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      pushed: ${{ steps.push-backend.outcome == 'success' }}
+      pushed: ${{ steps.push-backend.outcome == 'success' && 'true' || 'false' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -39,9 +39,21 @@ jobs:
       - name: Build frontend image
         run: docker build -t $ECR_REPOSITORY_FRONTEND:${{ github.sha }} ./frontend
 
+      - name: Check AWS credentials
+        id: check-creds
+        env:
+          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        run: |
+          if [ -n "$AWS_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::AWS credentials not configured — skipping ECR push"
+          fi
+
       - name: Configure AWS credentials
         id: aws-creds
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: steps.check-creds.outputs.available == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -50,12 +62,12 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        if: ${{ steps.aws-creds.outcome == 'success' }}
+        if: steps.check-creds.outputs.available == 'true'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Tag and push backend image
         id: push-backend
-        if: ${{ steps.login-ecr.outcome == 'success' }}
+        if: steps.login-ecr.outcome == 'success'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -66,7 +78,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
 
       - name: Tag and push frontend image
-        if: ${{ steps.login-ecr.outcome == 'success' }}
+        if: steps.login-ecr.outcome == 'success'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}

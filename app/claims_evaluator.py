@@ -22,11 +22,13 @@ from datetime import datetime
 
 import anthropic
 
-from app.config import settings
 from app.claim_session import (
-    ClaimSession, ClaimStatus, AgentRole, AIEstimates,
-    VA_CLAIMABLE_CONDITIONS, ALL_CLAIMABLE_CONDITIONS,
+    AgentRole,
+    AIEstimates,
+    ClaimSession,
+    ClaimStatus,
 )
+from app.config import settings
 from app.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -54,24 +56,24 @@ VA_COMPENSATION_RATES_MONTHLY = {
 def calculate_combined_rating(individual_ratings: list[int]) -> int:
     """
     Calculate combined VA disability rating using VA bilateral math.
-    
+
     VA uses the "whole person" theory: each subsequent disability is
     applied to the remaining "healthy" percentage, not stacked.
-    
+
     Example: 50% + 30% = 50 + (30% of remaining 50%) = 50 + 15 = 65%
     Rounded to nearest 10: 70%
     """
     if not individual_ratings:
         return 0
-    
+
     # Sort descending — highest rating applied first
     sorted_ratings = sorted(individual_ratings, reverse=True)
-    
+
     combined = 0.0
     for rating in sorted_ratings:
         remaining = 100.0 - combined
         combined += (remaining * rating / 100.0)
-    
+
     # VA rounds to nearest 10
     combined_rounded = round(combined / 10) * 10
     return min(int(combined_rounded), 100)
@@ -84,7 +86,7 @@ def estimate_backpay(
 ) -> float:
     """
     Estimate potential backpay based on effective date.
-    
+
     Backpay = monthly_rate × months_between(effective_date, estimated_decision)
     Effective date is typically the later of: service discharge + 1 year,
     or date of claim filing. If filed within 1 year of discharge,
@@ -95,14 +97,14 @@ def estimate_backpay(
             end_date = datetime.strptime(service_end_date, "%Y-%m-%d")
         else:
             end_date = datetime.now()
-        
+
         # If claim filed within 1 year of discharge, backpay from discharge
         now = datetime.now()
         months_since = max(1, (now.year - end_date.year) * 12 + (now.month - end_date.month))
-        
+
         # Cap at reasonable estimate (36 months typical max for initial claims)
         months_backpay = min(months_since, 36)
-        
+
         return round(monthly_rate * months_backpay, 2)
     except (ValueError, TypeError):
         # If dates can't be parsed, estimate 12 months
@@ -117,10 +119,10 @@ def estimate_decision_timeline(
 ) -> int:
     """
     Estimate VA decision timeline in days.
-    
+
     Based on VA published averages:
     - Initial claims: 100-150 days
-    - Supplemental claims: 60-90 days  
+    - Supplemental claims: 60-90 days
     - Higher-Level Review: 90-125 days
     - Board appeal: 365+ days
     - FDC (Fully Developed Claim): 30-60% faster
@@ -132,20 +134,20 @@ def estimate_decision_timeline(
         "hlr": 110,
         "board_appeal": 400,
     }
-    
+
     days = base_days.get(claim_type, 125)
-    
+
     # More conditions = longer processing
     days += max(0, (num_conditions - 2)) * 15
-    
+
     # Strong medical evidence reduces time
     if has_medical_evidence:
         days = int(days * 0.7)
-    
+
     # Presumptive conditions are faster
     if is_presumptive:
         days = int(days * 0.6)
-    
+
     return max(30, days)
 
 
@@ -283,7 +285,7 @@ class ClaimsEvaluator:
         """Compile all answers into a structured string for AI analysis."""
         all_answers = session.get_all_answers_decrypted()
         parts = []
-        
+
         for page_key, answers in all_answers.items():
             parts.append(f"\n=== {page_key.upper().replace('_', ' ')} ===")
             for key, value in answers.items():
@@ -294,30 +296,30 @@ class ClaimsEvaluator:
                         parts.append(f"  {key}.{sub_key}: {sub_val}")
                 else:
                     parts.append(f"  {key}: {value}")
-        
+
         return "\n".join(parts) if parts else "No answers submitted yet."
 
     def _get_claimed_conditions(self, session: ClaimSession) -> list[str]:
         """Extract claimed conditions from questionnaire answers."""
         conditions = []
         all_answers = session.get_all_answers_decrypted()
-        
+
         # Disabilities page
         disabilities = all_answers.get("disabilities", {})
         selected = disabilities.get("selected_conditions", [])
         if isinstance(selected, list):
             conditions.extend(selected)
-        
+
         custom = disabilities.get("custom_conditions", "")
         if custom:
             conditions.extend([c.strip() for c in custom.split(",") if c.strip()])
-        
+
         # Mental health page
         mental = all_answers.get("mental_health", {})
         mental_conditions = mental.get("conditions", [])
         if isinstance(mental_conditions, list):
             conditions.extend(mental_conditions)
-        
+
         return conditions
 
     def evaluate_claim(self, session: ClaimSession) -> AIEstimates:
@@ -327,11 +329,11 @@ class ClaimsEvaluator:
         """
         veteran_data = self._build_veteran_data_string(session)
         claimed_conditions = self._get_claimed_conditions(session)
-        
+
         # If no conditions claimed yet, return early estimates
         if not claimed_conditions:
             return self._basic_estimates(session)
-        
+
         # Retrieve relevant legal context
         context_str = ""
         if self._store:
@@ -346,14 +348,14 @@ class ClaimsEvaluator:
                     f"{r['text'][:500]}"
                     for r in retrieved
                 ])
-        
+
         # Call Claude for AI evaluation
         try:
             prompt = CLAIM_EVALUATION_PROMPT.format(
                 veteran_data=veteran_data,
                 context=context_str or "No specific legal context retrieved.",
             )
-            
+
             message = self._client.messages.create(
                 model=settings.claude_model,
                 max_tokens=2048,
@@ -364,18 +366,18 @@ class ClaimsEvaluator:
                     "content": "Analyze this veteran's claim data and provide rating estimates.",
                 }],
             )
-            
+
             ai_response = message.content[0].text
             estimates = self._parse_ai_response(ai_response, session)
-            
+
             logger.info(
                 "AI evaluation complete for session %s: combined=%d%%",
                 session.session_id,
                 estimates.estimated_combined_rating,
             )
             return estimates
-            
-        except Exception as exc:
+
+        except Exception:
             logger.exception("AI evaluation failed — using heuristic estimates")
             return self._heuristic_estimates(claimed_conditions, session)
 
@@ -388,44 +390,44 @@ class ClaimsEvaluator:
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if not json_match:
                 raise ValueError("No JSON found in AI response")
-            
+
             data = json.loads(json_match.group())
-            
+
             individual_ratings = data.get("individual_ratings", [])
             rating_values = [
                 r.get("estimated_rating", 0) for r in individual_ratings
             ]
-            
+
             combined = calculate_combined_rating(rating_values)
             monthly = VA_COMPENSATION_RATES_MONTHLY.get(combined, 0.0)
-            
+
             # Get service end date for backpay calculation
             service_answers = session.get_page_answers(
                 __import__('app.claim_session', fromlist=['ClaimPage']).ClaimPage.MILITARY_SERVICE
             )
             service_end = service_answers.get("service_end_date", "")
-            
+
             # Check for medical evidence and presumptive conditions
             medical_answers = session.get_page_answers(
                 __import__('app.claim_session', fromlist=['ClaimPage']).ClaimPage.MEDICAL_EVIDENCE
             )
             has_evidence = bool(medical_answers.get("has_medical_records", False))
-            
+
             is_presumptive = any(
                 r.get("service_connection_strength") == "strong"
                 and "presumptive" in r.get("rationale", "").lower()
                 for r in individual_ratings
             )
-            
+
             timeline = estimate_decision_timeline(
                 num_conditions=len(individual_ratings),
                 has_medical_evidence=has_evidence,
                 is_presumptive=is_presumptive,
                 claim_type=data.get("claim_strategy", "initial"),
             )
-            
+
             backpay = estimate_backpay(monthly, service_end)
-            
+
             return AIEstimates(
                 estimated_rating_percent=combined,
                 estimated_combined_rating=combined,
@@ -437,7 +439,7 @@ class ClaimsEvaluator:
                 notes=data.get("notes", []),
                 last_updated=time.time(),
             )
-            
+
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
             logger.warning("Failed to parse AI response: %s", exc)
             return self._heuristic_estimates(
@@ -469,10 +471,10 @@ class ClaimsEvaluator:
             "tbi": 40, "diabetes": 20,
             "flat feet": 10, "plantar fasciitis": 10,
         }
-        
+
         individual_ratings = []
         rating_values = []
-        
+
         for condition in conditions:
             condition_lower = condition.lower()
             estimated = 10  # default
@@ -480,7 +482,7 @@ class ClaimsEvaluator:
                 if keyword in condition_lower:
                     estimated = rating
                     break
-            
+
             individual_ratings.append({
                 "condition": condition,
                 "estimated_rating": estimated,
@@ -488,10 +490,10 @@ class ClaimsEvaluator:
                 "service_connection_strength": "moderate",
             })
             rating_values.append(estimated)
-        
+
         combined = calculate_combined_rating(rating_values)
         monthly = VA_COMPENSATION_RATES_MONTHLY.get(combined, 0.0)
-        
+
         return AIEstimates(
             estimated_rating_percent=combined,
             estimated_combined_rating=combined,
@@ -520,7 +522,7 @@ class ClaimsEvaluator:
         agent_analysis = json.dumps(
             session.ai_estimates.to_dict(), indent=2
         )
-        
+
         context_str = ""
         if self._store:
             conditions = self._get_claimed_conditions(session)
@@ -535,14 +537,14 @@ class ClaimsEvaluator:
                         f"{r['text'][:500]}"
                         for r in retrieved
                     ])
-        
+
         try:
             prompt = SUPERVISOR_REVIEW_PROMPT.format(
                 agent_analysis=agent_analysis,
                 veteran_profile=veteran_data,
                 context=context_str or "No specific context available.",
             )
-            
+
             message = self._client.messages.create(
                 model=settings.claude_model,
                 max_tokens=2048,
@@ -550,10 +552,12 @@ class ClaimsEvaluator:
                 system=prompt,
                 messages=[{
                     "role": "user",
-                    "content": "Review the claims agent analysis and prepare supervisor assessment.",
+                    "content": (
+                        "Review the claims agent analysis and prepare supervisor assessment."
+                    ),
                 }],
             )
-            
+
             response_text = message.content[0].text
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if json_match:
@@ -564,9 +568,9 @@ class ClaimsEvaluator:
                     f"Supervisor review completed at {time.time()}"
                 )
                 return result
-            
+
             return {"error": "Could not parse supervisor response"}
-            
+
         except Exception as exc:
             logger.exception("Supervisor review failed")
             return {"error": str(exc)}
@@ -578,10 +582,9 @@ class ClaimsEvaluator:
         """
         session.status = ClaimStatus.FDC_PREP
         session.agent.current_handler = AgentRole.CLAIMS_ASSISTANT
-        
-        all_answers = session.get_all_answers_decrypted()
+
         conditions = self._get_claimed_conditions(session)
-        
+
         fdc_package = {
             "claim_type": "Fully Developed Claim (FDC)",
             "primary_form": "VA Form 21-526EZ",
@@ -599,7 +602,7 @@ class ClaimsEvaluator:
             "status": "draft",
             "prepared_at": time.time(),
         }
-        
+
         # Add condition-specific forms
         for condition in conditions:
             condition_lower = condition.lower()
@@ -621,13 +624,13 @@ class ClaimsEvaluator:
                 fdc_package["evidence_checklist"].append(
                     "Airborne Hazards and Open Burn Pit Registry enrollment"
                 )
-        
+
         # Deduplicate
         fdc_package["required_forms"] = list(set(fdc_package["required_forms"]))
         fdc_package["evidence_checklist"] = list(set(fdc_package["evidence_checklist"]))
-        
+
         session.agent.notes.append(
             f"FDC package prepared at {time.time()}"
         )
-        
+
         return fdc_package

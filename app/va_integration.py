@@ -30,7 +30,7 @@ from enum import Enum
 import httpx
 
 from app.config import settings
-from app.pii_shield import audit_log, field_encryptor, AuditEntry
+from app.pii_shield import AuditEntry, audit_log, field_encryptor
 
 logger = logging.getLogger(__name__)
 

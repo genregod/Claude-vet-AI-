@@ -25,8 +25,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import uuid
-import time
 from pathlib import Path
 from typing import Any
 
@@ -330,10 +328,6 @@ class RecordsExtractor:
                 }
                 ms["discharge_type"] = discharge_map.get(dtype, dtype.title())
                 break
-
-        # Date patterns (MM/DD/YYYY or YYYY-MM-DD)
-        date_pattern = r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})'
-        dates_found = re.findall(date_pattern, document_text)
 
         # MOS pattern (e.g., "11B", "0311", "3D0X1")
         mos_pattern = r'\b(\d{1,2}[A-Z]\d?[A-Z]?\d?[A-Z]?\d?)\b'

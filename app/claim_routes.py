@@ -22,21 +22,25 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.claim_session import (
-    ClaimSession, ClaimSessionStore, ClaimPage, ClaimStatus,
-    VA_CLAIMABLE_CONDITIONS, ALL_CLAIMABLE_CONDITIONS,
-    PAGE_ORDER, TOTAL_PAGES,
+    ALL_CLAIMABLE_CONDITIONS,
+    PAGE_ORDER,
+    TOTAL_PAGES,
+    VA_CLAIMABLE_CONDITIONS,
+    ClaimPage,
+    ClaimSessionStore,
+    ClaimStatus,
 )
 from app.claims_evaluator import ClaimsEvaluator
-from app.config import settings, UPLOADS_DIR
+from app.config import UPLOADS_DIR
 from app.records_extractor import (
-    RecordsExtractor,
-    map_extracted_to_questionnaire,
     ALLOWED_RECORD_EXTENSIONS,
     MAX_RECORD_SIZE_MB,
+    RecordsExtractor,
+    map_extracted_to_questionnaire,
 )
 from app.vector_store import VectorStore
 
@@ -147,17 +151,17 @@ async def create_claim_session(request: CreateClaimSessionRequest):
     Returns session_id for all subsequent questionnaire interactions.
     """
     _require_claims()
-    
+
     # Create session with user identifier
     session = _claim_store.create_session(user_id=request.email)
-    
+
     # Save signup info as the first page
     session.save_page(ClaimPage.SIGNUP, {
         "email": request.email,
         "first_name": request.first_name,
         "last_name": request.last_name,
     })
-    
+
     return CreateClaimSessionResponse(
         session_id=session.session_id,
         message="Claim session created. Begin filling out the questionnaire.",
@@ -170,11 +174,11 @@ async def create_claim_session(request: CreateClaimSessionRequest):
 async def get_claim_session(session_id: str):
     """Get current session status, progress, and AI estimates."""
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     summary = session.to_summary()
     return ClaimSessionStatus(**summary)
 
@@ -187,11 +191,11 @@ async def save_page_answers(session_id: str, request: SavePageRequest):
     Returns updated progress and AI estimates.
     """
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     # Validate page name
     try:
         page = ClaimPage(request.page)
@@ -201,23 +205,23 @@ async def save_page_answers(session_id: str, request: SavePageRequest):
             status_code=400,
             detail=f"Invalid page '{request.page}'. Valid: {valid_pages}",
         )
-    
+
     # Save page answers (auto-encrypts PII)
     session.save_page(page, request.answers)
-    
+
     # Trigger background AI evaluation
     try:
         estimates = _evaluator.evaluate_claim(session)
         session.ai_estimates = estimates
     except Exception as exc:
         logger.warning("AI evaluation failed for session %s: %s", session_id, exc)
-    
+
     # Determine next page
     next_page = None
     page_idx = PAGE_ORDER.index(page)
     if page_idx + 1 < TOTAL_PAGES:
         next_page = PAGE_ORDER[page_idx + 1].value
-    
+
     return SavePageResponse(
         session_id=session_id,
         page_saved=page.value,
@@ -232,16 +236,16 @@ async def save_page_answers(session_id: str, request: SavePageRequest):
 async def get_page_answers(session_id: str, page_name: str):
     """Retrieve previously saved answers for a specific page."""
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     try:
         page = ClaimPage(page_name)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid page '{page_name}'.")
-    
+
     answers = session.get_page_answers(page)
     return {
         "session_id": session_id,
@@ -255,11 +259,11 @@ async def get_page_answers(session_id: str, page_name: str):
 async def get_ai_estimates(session_id: str):
     """Get current AI-generated estimates for this claim."""
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     return AIEstimatesResponse(**session.ai_estimates.to_dict())
 
 
@@ -267,14 +271,14 @@ async def get_ai_estimates(session_id: str):
 async def trigger_evaluation(session_id: str):
     """Manually trigger a full AI evaluation of current answers."""
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     estimates = _evaluator.evaluate_claim(session)
     session.ai_estimates = estimates
-    
+
     return {
         "session_id": session_id,
         "estimates": estimates.to_dict(),
@@ -289,11 +293,11 @@ async def submit_claim(session_id: str):
     Claims Agent → Supervisor → Claims Assistant → FDC Package
     """
     _require_claims()
-    
+
     session = _claim_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Claim session not found or expired.")
-    
+
     # Check minimum pages completed
     required_pages = ["personal_info", "military_service", "disabilities"]
     missing = [p for p in required_pages if p not in session.completed_pages]
@@ -302,18 +306,18 @@ async def submit_claim(session_id: str):
             status_code=400,
             detail=f"Required pages not completed: {missing}",
         )
-    
+
     # Step 1: Claims Agent analysis (already done via evaluate_claim)
     session.status = ClaimStatus.AGENT_ASSIGNED
-    
+
     # Step 2: Supervisor review
     supervisor_review = _evaluator.route_to_supervisor(session)
-    
+
     # Step 3: Claims Assistant FDC preparation
     fdc_package = _evaluator.prepare_fdc(session)
-    
+
     session.status = ClaimStatus.SUBMITTED
-    
+
     return SubmitClaimResponse(
         session_id=session_id,
         status="submitted",
@@ -479,11 +483,11 @@ async def get_uploaded_files(session_id: str):
 async def delete_claim_session(session_id: str):
     """Delete a claim session and all stored data."""
     _require_claims()
-    
+
     deleted = _claim_store.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Claim session not found.")
-    
+
     return {
         "session_id": session_id,
         "message": "Claim session and all associated data have been securely deleted.",

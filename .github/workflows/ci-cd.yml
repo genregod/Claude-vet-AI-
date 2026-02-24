@@ -34,7 +34,7 @@ jobs:
       - name: Run Python linting
         run: |
           python -m pip install ruff
-          ruff check app/ --select E,F,W
+          ruff check app/
       
       - name: Set up Node.js
         uses: actions/setup-node@v4

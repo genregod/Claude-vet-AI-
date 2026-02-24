@@ -14,7 +14,6 @@ enters the RAG pipeline:
 
 import re
 
-
 # ── 1.  Header / Footer Removal ─────────────────────────────────────
 
 # Patterns found in M21-1 manual HTML/PDF exports, BVA decision headers,

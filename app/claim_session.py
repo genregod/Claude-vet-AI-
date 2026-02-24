@@ -24,12 +24,8 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
-from cryptography.fernet import Fernet
-
-from app.config import settings
-from app.pii_shield import field_encryptor, audit_log, AuditEntry, DataClass
+from app.pii_shield import AuditEntry, DataClass, audit_log, field_encryptor
 
 logger = logging.getLogger(__name__)
 
@@ -272,41 +268,41 @@ class ClaimSession:
     status: ClaimStatus = ClaimStatus.INTAKE
     current_page: ClaimPage = ClaimPage.SIGNUP
     completed_pages: list[str] = field(default_factory=list)
-    
+
     # Page answers — stored encrypted for PII fields
     answers: dict[str, dict] = field(default_factory=dict)
-    
+
     # Uploaded file records (metadata only — files stored on disk)
     uploaded_files: list[dict] = field(default_factory=list)
-    
+
     # AI estimates — updated as pages are completed
     ai_estimates: AIEstimates = field(default_factory=AIEstimates)
-    
+
     # Agent assignment
     agent: AgentAssignment = field(default_factory=AgentAssignment)
-    
+
     # Timestamps
     created_at: float = field(default_factory=time.time)
     last_active: float = field(default_factory=time.time)
-    
+
     @property
     def is_expired(self) -> bool:
         # Claim sessions have a longer TTL — 24 hours
         return (time.time() - self.last_active) > 86400
-    
+
     @property
     def progress_percent(self) -> float:
         if not self.completed_pages:
             return 0.0
         return (len(self.completed_pages) / TOTAL_PAGES) * 100
-    
+
     @property
     def current_page_index(self) -> int:
         try:
             return PAGE_ORDER.index(self.current_page)
         except ValueError:
             return 0
-    
+
     def save_page(self, page: ClaimPage, answers: dict) -> None:
         """Save answers for a questionnaire page (encrypts PII fields)."""
         # Encrypt sensitive fields before storage
@@ -316,17 +312,17 @@ class ClaimSession:
             resource_id=self.session_id,
         )
         self.answers[page.value] = encrypted_answers
-        
+
         if page.value not in self.completed_pages:
             self.completed_pages.append(page.value)
-        
+
         # Advance to next page
         current_idx = PAGE_ORDER.index(page)
         if current_idx + 1 < TOTAL_PAGES:
             self.current_page = PAGE_ORDER[current_idx + 1]
-        
+
         self.last_active = time.time()
-        
+
         audit_log.record(AuditEntry(
             user_id=self.user_id,
             action="write",
@@ -335,13 +331,13 @@ class ClaimSession:
             resource_id=self.session_id,
             reason="questionnaire_save",
         ))
-    
+
     def get_page_answers(self, page: ClaimPage) -> dict:
         """Retrieve and decrypt answers for a specific page."""
         encrypted = self.answers.get(page.value, {})
         if not encrypted:
             return {}
-        
+
         decrypted = field_encryptor.decrypt_dict(
             encrypted,
             user_id=self.user_id,
@@ -349,7 +345,7 @@ class ClaimSession:
             reason="questionnaire_recall",
         )
         return decrypted
-    
+
     def get_all_answers_decrypted(self) -> dict:
         """Get all answers across all pages, decrypted."""
         result = {}
@@ -361,7 +357,7 @@ class ClaimSession:
                 reason="full_review",
             )
         return result
-    
+
     def add_uploaded_file(self, file_info: dict) -> None:
         """Record metadata about an uploaded file."""
         self.uploaded_files.append(file_info)
@@ -390,7 +386,7 @@ class ClaimSession:
 class ClaimSessionStore:
     """
     In-memory store for claim sessions with encryption.
-    
+
     Production migration: Replace _sessions dict with DynamoDB or
     PostgreSQL backend for persistence across deployments.
     """
@@ -407,18 +403,18 @@ class ClaimSessionStore:
             session_id=session_id,
             user_id=user_id or session_id,
         )
-        
+
         # Assign AI agents
         session.agent = AgentAssignment(
             claims_agent_id=f"agent-{uuid.uuid4().hex[:8]}",
             supervisor_id=f"supervisor-{uuid.uuid4().hex[:8]}",
             claims_assistant_id=f"assistant-{uuid.uuid4().hex[:8]}",
         )
-        
+
         self._sessions[session_id] = session
         if user_id:
             self._user_index[user_id] = session_id
-        
+
         self._cleanup_expired()
         logger.info("Created claim session %s for user %s", session_id, user_id or "anonymous")
         return session

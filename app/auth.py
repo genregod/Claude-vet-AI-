@@ -23,7 +23,6 @@ Security model:
 from __future__ import annotations
 
 import hashlib
-import hmac
 import logging
 import secrets
 import time
@@ -31,8 +30,8 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 
-import jwt
 import httpx
+import jwt
 
 from app.config import settings
 

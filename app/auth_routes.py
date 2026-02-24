@@ -24,23 +24,22 @@ import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import (
     AuthProvider,
     IDmeClient,
     LivenessChecker,
-    TokenPair,
     UserProfile,
     UserStore,
     VerificationLevel,
+    _hash_token,
     create_token_pair,
     decode_access_token,
-    _hash_token,
 )
 from app.config import settings
-from app.pii_shield import audit_log, field_encryptor, AuditEntry
-from app.va_integration import VALighthouseClient, VACredentials
+from app.pii_shield import AuditEntry, audit_log, field_encryptor
+from app.va_integration import VALighthouseClient
 
 logger = logging.getLogger(__name__)
 
@@ -392,7 +391,7 @@ async def va_callback(request: OAuthCallbackRequest):
 
     # Encrypt and temporarily store VA credentials
     # (never persisted to disk — held in memory during active session only)
-    encrypted_token = field_encryptor.encrypt_field(
+    field_encryptor.encrypt_field(
         va_creds.va_access_token,
         "token",
         user_id=user_id,

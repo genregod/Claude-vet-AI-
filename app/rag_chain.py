@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import anthropic
 
 from app.config import settings
-from app.prompts import build_prompt, build_evaluation_prompt
+from app.prompts import build_evaluation_prompt, build_prompt
 from app.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)

@@ -34,20 +34,24 @@ from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
-from fastapi.staticfiles import StaticFiles
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware as _BHMW
 
 from app.auth import UserProfile
 from app.auth_routes import (
-    router as auth_router,
     get_current_user,
-    require_consent,
     init_auth_dependencies,
+    require_consent,
 )
-from app.claim_routes import router as claims_router, init_claims
-from app.config import settings, UPLOADS_DIR
+from app.auth_routes import (
+    router as auth_router,
+)
+from app.claim_routes import init_claims
+from app.claim_routes import router as claims_router
+from app.config import UPLOADS_DIR, settings
 from app.ingest import ingest_directory, ingest_file
 from app.middleware import configure_security
 from app.pii_shield import install_log_scrubber
@@ -114,7 +118,6 @@ app.include_router(claims_router)
 # This middleware strips the /api prefix so the same route handlers
 # work for both /chat and /api/chat, etc.
 
-from starlette.middleware.base import BaseHTTPMiddleware as _BHMW
 
 class _ApiPrefixMiddleware(_BHMW):
     async def dispatch(self, request, call_next):

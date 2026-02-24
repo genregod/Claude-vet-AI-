@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.config import settings, RAW_DOCS_DIR
+from app.config import RAW_DOCS_DIR, settings
 from app.utils.text_cleaning import clean_document
 
 logger = logging.getLogger(__name__)

@@ -18,7 +18,7 @@ from typing import Protocol
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-from app.config import settings, CHROMA_DIR
+from app.config import CHROMA_DIR, settings
 from app.ingest import Chunk
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,6 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings
 
-
 # ── Paths ────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -29,7 +28,7 @@ class Settings(BaseSettings):
 
     # ── Anthropic / Claude ───────────────────────────────────────────
     anthropic_api_key: str = ""
-    claude_model: str = "claude-3-5-sonnet-latest"
+    claude_model: str = "claude-sonnet-4-20250514"
     claude_max_tokens: int = 4096
     claude_temperature: float = 0.2  # low temp for factual legal analysis
 
@@ -52,8 +51,7 @@ class Settings(BaseSettings):
     # ── Session Management ───────────────────────────────────────────
     # Fernet key for encrypting PII in session storage.
     # Generate with:
-    # python -c "from cryptography.fernet import Fernet; \
-    #   print(Fernet.generate_key().decode())"
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     encryption_key: str = Fernet.generate_key().decode()
     session_ttl_seconds: int = 3600      # 1 hour idle timeout
     max_conversation_turns: int = 20     # max turns kept in context window

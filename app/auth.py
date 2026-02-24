@@ -30,8 +30,8 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 
-import jwt
 import httpx
+import jwt
 
 from app.config import settings
 

@@ -18,7 +18,7 @@ from typing import Protocol
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-from app.config import settings, CHROMA_DIR
+from app.config import CHROMA_DIR, settings
 from app.ingest import Chunk
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,20 @@ class VoyageEmbedder:
         logger.info("Using Voyage AI model: %s", model)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = self._client.embed(texts, model=self._model)
+                return result.embeddings
+            except Exception as e:
+                if "RateLimitError" in type(e).__name__ or "rate" in str(e).lower():
+                    wait = 20 * (attempt + 1)  # 20s, 40s, 60s
+                    logger.warning("Voyage AI rate limit hit, waiting %ds…", wait)
+                    time.sleep(wait)
+                else:
+                    raise
+        # Final attempt — let it raise if it fails
         result = self._client.embed(texts, model=self._model)
         return result.embeddings
 

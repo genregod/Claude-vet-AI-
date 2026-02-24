@@ -24,7 +24,7 @@ import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.auth import (
     AuthProvider,
@@ -33,12 +33,12 @@ from app.auth import (
     UserProfile,
     UserStore,
     VerificationLevel,
+    _hash_token,
     create_token_pair,
     decode_access_token,
-    _hash_token,
 )
 from app.config import settings
-from app.pii_shield import audit_log, field_encryptor, AuditEntry
+from app.pii_shield import AuditEntry, audit_log, field_encryptor
 from app.va_integration import VALighthouseClient
 
 logger = logging.getLogger(__name__)
@@ -408,10 +408,7 @@ async def va_callback(request: OAuthCallbackRequest):
 
     return {
         "status": "success",
-        "message": (
-            "VA.gov access authorized. "
-            "Your records are now available for case evaluation."
-        ),
+        "message": "VA.gov access authorized. Your records are now available for case evaluation.",
         "scopes": va_creds.scopes,
     }
 
@@ -452,10 +449,7 @@ async def submit_consent(
     state_key = f"consent:{submission.challenge_id}"
     challenge_data = _auth_state_store.pop(state_key, None)
     if challenge_data is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired consent challenge.",
-        )
+        raise HTTPException(status_code=400, detail="Invalid or expired consent challenge.")
 
     if challenge_data["user_id"] != current_user.user_id:
         raise HTTPException(status_code=403, detail="Consent challenge mismatch.")

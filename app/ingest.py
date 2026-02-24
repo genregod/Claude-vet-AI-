@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.config import settings, RAW_DOCS_DIR
+from app.config import RAW_DOCS_DIR, settings
 from app.utils.text_cleaning import clean_document
 
 logger = logging.getLogger(__name__)
@@ -55,11 +55,9 @@ _SOURCE_TAG_RULES: list[tuple[list[str], str]] = [
     (["m21-1", "m21_1", "m21"],       "M21-1_Manual"),
     (["bva", "decision"],             "BVA_Decision"),
     (["usc", "us_code"],              "US_Code"),
-    # BCMR = Board for Correction of Military Records
-    (["bcmr"],                         "BCMR"),
+    (["bcmr"],                         "BCMR"),        # Board for Correction of Military Records
     (["drb"],                          "DRB"),         # Discharge Review Board
-    # COVA = Court of Appeals for Veterans Claims
-    (["cova", "vet_app", "cavc"],      "COVA"),
+    (["cova", "vet_app", "cavc"],      "COVA"),        # Court of Appeals for Veterans Claims
     (["va_form"],                      "VA_Form"),     # VA form instructions / guidance
 ]
 

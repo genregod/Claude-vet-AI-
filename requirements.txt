@@ -20,6 +20,7 @@ chromadb>=0.5,<1.0
 # ── Security & encryption ───────────────────────────────────────────
 cryptography>=42.0,<44.0          # Fernet encryption for PII in sessions
 python-multipart>=0.0.9,<1.0     # required for FastAPI file uploads
+pypdf>=4.0,<7.0                  # PDF text extraction for military records upload
 
 # ── Authentication ───────────────────────────────────────────────────
 PyJWT>=2.8,<3.0                   # JWT access/refresh tokens

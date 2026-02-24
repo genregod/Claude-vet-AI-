@@ -206,15 +206,18 @@ Reference PDFs are stored under `docs/references/`:
 See [`infrastructure/aws-architecture.md`](infrastructure/aws-architecture.md) for the full production
 architecture (ECS Fargate, DynamoDB sessions, S3 document storage, WAF, CloudFront).
 
-### GitHub Actions credentials required for CI/CD deploy
+### GitHub Actions AWS OIDC setup for CI/CD deploy
 
 To allow the `.github/workflows/ci-cd.yml` pipeline to build, push, and deploy to AWS,
-configure these **repository secrets**:
+configure an IAM role trust for GitHub OIDC and use that role in the workflow.
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
+This repository is configured to assume:
 
-The IAM user/role behind those credentials must be allowed to:
+- `arn:aws:iam::973028704465:role/github-actions-deployment-role`
+
+No long-lived `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` are required in GitHub secrets.
+
+The IAM role must be allowed to:
 - Authenticate to ECR and push images to:
   - `valor-assist-backend`
   - `valor-assist-frontend`

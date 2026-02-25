@@ -180,7 +180,7 @@ class QuickActionRequest(BaseModel):
 class EvaluateRequest(BaseModel):
     service_branch: str = Field(
         ...,
-        description="Military branch of service (e.g., Army, Navy, Air Force, Marines, Coast Guard).",
+        description="Military branch of service (e.g., Army, Navy, Air Force, Marines, Coast Guard).",  # noqa: E501
         json_schema_extra={"examples": ["Army"]},
     )
     current_rating: str = Field(

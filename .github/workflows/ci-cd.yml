@@ -1,52 +1,165 @@
-# Updated CI/CD Workflow
-
-name: CI/CD
+name: CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY_BACKEND: valor-assist-backend
+  ECR_REPOSITORY_FRONTEND: valor-assist-frontend
+  ECS_CLUSTER: valor-assist-prod-cluster
+  ECS_SERVICE_BACKEND: valor-assist-prod-backend-svc
+  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc
 
 jobs:
-  build-and-push:
+  # ── Lint and Test ──────────────────────────────────────────────────
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Setup Testcontainers Cloud Client
-        uses: atomicjar/testcontainers-cloud-setup-action@v1
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run Python linting
+        run: |
+          python -m pip install ruff
+          ruff check app/ --select E,F,W
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.TC_CLOUD_TOKEN }}
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build and push Docker images
-        uses: docker/build-push-action@v2
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: TypeScript check
+        run: npm run check --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+  # ── Build and Push Docker Images to ECR ───────────────────────────
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          context: .
-          push: true
-          tags: |
-            genregod/valor-assist-docker:latest
-            genregod/valor-assist-docker:${{ github.sha }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-cicd
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verification of Docker image push
-        run: 'echo "Successfully pushed valor-assist-docker image with tags: latest and ${{ github.sha }}"'
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Build, tag, and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f ./Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest \
+            .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
+          echo "✅ Backend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG"
+
+      - name: Build, tag, and push frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          docker build \
+            --build-arg VITE_API_URL="$VITE_API_URL" \
+            -f ./frontend/Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest \
+            ./frontend
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
+          echo "✅ Frontend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG"
+
+  # ── Deploy to AWS ECS ──────────────────────────────────────────────
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
 
-      - name: Deploy to ECS
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Backend to ECS
         run: |
-          echo "Deploying with task definition referencing the image: genregod/valor-assist-docker:latest"
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE_BACKEND \
+            --force-new-deployment \
+            --region $AWS_REGION
+          echo "✅ Backend deployment triggered"
+
+      - name: Deploy Frontend to ECS
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE_FRONTEND \
+            --force-new-deployment \
+            --region $AWS_REGION
+          echo "✅ Frontend deployment triggered"
+
+      - name: Wait for Backend to stabilize
+        run: |
+          echo "⏳ Waiting for backend to stabilize..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" \
+            --region "$AWS_REGION"
+          echo "✅ Backend stable"
+
+      - name: Wait for Frontend to stabilize
+        run: |
+          echo "⏳ Waiting for frontend to stabilize..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_FRONTEND" \
+            --region "$AWS_REGION"
+          echo "✅ Frontend stable"
+
+      - name: Deployment complete
+        run: |
+          echo "🚀 Deployment of backend and frontend to valor-assist-prod-cluster complete!"

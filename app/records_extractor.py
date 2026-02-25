@@ -240,7 +240,7 @@ class RecordsExtractor:
         try:
             response = self._client.messages.create(
                 model=settings.claude_model,
-                system="You are a military records parsing assistant. Respond ONLY with valid JSON.",
+                system="You are a military records parsing assistant. Respond ONLY with valid JSON.",  # noqa: E501
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=4096,
                 temperature=0.1,
@@ -293,9 +293,9 @@ class RecordsExtractor:
         }
 
         # Detect document type
-        if "DD FORM 214" in text_upper or "DD-214" in text_upper or "CERTIFICATE OF RELEASE OR DISCHARGE" in text_upper:
+        if "DD FORM 214" in text_upper or "DD-214" in text_upper or "CERTIFICATE OF RELEASE OR DISCHARGE" in text_upper:  # noqa: E501
             result["document_type"] = DocumentType.DD214
-            result["document_description"] = "DD-214 Certificate of Release or Discharge from Active Duty"
+            result["document_description"] = "DD-214 Certificate of Release or Discharge from Active Duty"  # noqa: E501
         elif "SERVICE TREATMENT" in text_upper or "MEDICAL RECORD" in text_upper:
             result["document_type"] = DocumentType.SERVICE_TREATMENT_RECORDS
         elif "RATING DECISION" in text_upper or "DEPARTMENT OF VETERANS AFFAIRS" in text_upper:
@@ -311,13 +311,13 @@ class RecordsExtractor:
         ms: dict[str, Any] = {}
 
         # Branch
-        for branch_name in ["ARMY", "NAVY", "AIR FORCE", "MARINE CORPS", "COAST GUARD", "SPACE FORCE"]:
+        for branch_name in ["ARMY", "NAVY", "AIR FORCE", "MARINE CORPS", "COAST GUARD", "SPACE FORCE"]:  # noqa: E501
             if branch_name in text_upper:
                 ms["branch"] = branch_name.title()
                 break
 
         # Discharge type
-        for dtype in ["HONORABLE", "GENERAL", "OTHER THAN HONORABLE", "BAD CONDUCT", "DISHONORABLE"]:
+        for dtype in ["HONORABLE", "GENERAL", "OTHER THAN HONORABLE", "BAD CONDUCT", "DISHONORABLE"]:  # noqa: E501
             if dtype in text_upper:
                 discharge_map = {
                     "HONORABLE": "Honorable",

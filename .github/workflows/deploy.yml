@@ -1,65 +1,28 @@
-name: Manual Deploy to AWS ECS
-
+name: Deploy to ECS
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
-env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY_BACKEND: valor-assist-backend
-  ECR_REPOSITORY_FRONTEND: valor-assist-frontend
-  ECS_CLUSTER: valor-assist-prod-cluster
-  ECS_SERVICE_BACKEND: valor-assist-prod-backend-svc
-  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc
-  ECS_TASK_FAMILY_BACKEND: valor-assist-prod-backend
-  ECS_TASK_FAMILY_FRONTEND: valor-assist-prod-frontend
-  ECS_BACKEND_CPU: "1024"
-  ECS_BACKEND_MEMORY: "2048"
-  ECS_FRONTEND_CPU: "512"
-  ECS_FRONTEND_MEMORY: "1024"
-  ECS_ASSIGN_PUBLIC_IP: ENABLED
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
 
 jobs:
   deploy:
-    name: Deploy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: github-actions-manual-deploy
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push backend image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -f ./Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
-
-      - name: Build, tag, and push frontend image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-        run: |
-          docker build --build-arg VITE_API_URL="$VITE_API_URL" -f ./frontend/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG ./frontend
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
 
       - name: Deploy Backend to ECS
         run: |
@@ -81,7 +44,8 @@ jobs:
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE_BACKEND \
             --task-definition "${ECS_TASK_FAMILY_BACKEND}:${REVISION}" \
-            --force-new-deployment
+            --force-new-deployment \
+            --region $AWS_REGION
           echo "✅ Backend deployment triggered with ${ECS_TASK_FAMILY_BACKEND}:${REVISION} (image: $IMAGE)"
 
       - name: Deploy Frontend to ECS
@@ -104,15 +68,6 @@ jobs:
             --cluster $ECS_CLUSTER \
             --service $ECS_SERVICE_FRONTEND \
             --task-definition "${ECS_TASK_FAMILY_FRONTEND}:${REVISION}" \
-            --force-new-deployment
+            --force-new-deployment \
+            --region $AWS_REGION
           echo "✅ Frontend deployment triggered with ${ECS_TASK_FAMILY_FRONTEND}:${REVISION} (image: $IMAGE)"
-
-      - name: Wait for deployment completion
-        run: |
-          echo "Waiting for backend deployment to complete..."
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_BACKEND"
-
-          echo "Waiting for frontend deployment to complete..."
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE_FRONTEND"
-
-          echo "✅ Deployment completed successfully!"

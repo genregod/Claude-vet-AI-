@@ -235,15 +235,12 @@ The IAM role must be allowed to:
   - `valor-assist-backend`
   - `valor-assist-frontend`
 - Update and wait on ECS services:
-  - cluster `valor-assist-cluster`
-  - services `valor-assist-backend` and `valor-assist-frontend`
+  - cluster `valor-assist-prod-cluster`
+  - services `valor-assist-prod-backend-svc` and `valor-assist-prod-frontend-svc`
 
-The pipeline will now automatically create missing AWS deployment resources when possible:
-- ECR repositories (`valor-assist-backend`, `valor-assist-frontend`)
-- ECS cluster (`valor-assist-cluster`)
-- ECS services (`valor-assist-backend`, `valor-assist-frontend`) using default VPC/subnets/security group
-
-By default, ECS services are created with `assignPublicIp=ENABLED` in the CI workflow.
-Set `ECS_ASSIGN_PUBLIC_IP` in `.github/workflows/ci-cd.yml` to `DISABLED` if your deployment uses private subnets/NAT.
+Ensure the following AWS resources exist before running the pipeline:
+- ECR repositories: `valor-assist-backend`, `valor-assist-frontend`
+- ECS cluster: `valor-assist-prod-cluster`
+- ECS services: `valor-assist-prod-backend-svc`, `valor-assist-prod-frontend-svc`
 
 Ensure your deployment region and names match `.github/workflows/ci-cd.yml` (defaults to `us-east-1`).

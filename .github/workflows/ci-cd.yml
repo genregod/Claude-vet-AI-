@@ -88,51 +88,71 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy Backend to ECS
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_BACKEND}:latest"
+          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_BACKEND}:${IMAGE_TAG}"
+          # Preflight: verify the cluster and service exist before attempting deployment
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" \
+            --region "$AWS_REGION" \
+            --query "services[?serviceName=='${ECS_SERVICE_BACKEND}'] | [0].status" \
+            --output text | grep -q "ACTIVE" \
+            || { echo "❌ ECS service '${ECS_SERVICE_BACKEND}' not found or not ACTIVE in cluster '${ECS_CLUSTER}'"; exit 1; }
           TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition $ECS_TASK_FAMILY_BACKEND \
-            --region $AWS_REGION \
+            --task-definition "$ECS_TASK_FAMILY_BACKEND" \
+            --region "$AWS_REGION" \
             --query 'taskDefinition' --output json)
           NEW_DEF=$(echo "$TASK_DEF" | jq \
             --arg IMAGE "$IMAGE" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
-             .containerDefinitions[0].image = $IMAGE')
+             (.containerDefinitions[] | select(.name == "backend")).image = $IMAGE')
           REVISION=$(aws ecs register-task-definition \
             --cli-input-json "$NEW_DEF" \
-            --region $AWS_REGION \
+            --region "$AWS_REGION" \
             --query 'taskDefinition.revision' --output text)
           aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_SERVICE_BACKEND \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_BACKEND" \
             --task-definition "${ECS_TASK_FAMILY_BACKEND}:${REVISION}" \
             --force-new-deployment \
-            --region $AWS_REGION
+            --region "$AWS_REGION"
           echo "✅ Backend deployment triggered with ${ECS_TASK_FAMILY_BACKEND}:${REVISION} (image: $IMAGE)"
 
       - name: Deploy Frontend to ECS
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_FRONTEND}:latest"
+          IMAGE="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_FRONTEND}:${IMAGE_TAG}"
+          # Preflight: verify the cluster and service exist before attempting deployment
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_FRONTEND" \
+            --region "$AWS_REGION" \
+            --query "services[?serviceName=='${ECS_SERVICE_FRONTEND}'] | [0].status" \
+            --output text | grep -q "ACTIVE" \
+            || { echo "❌ ECS service '${ECS_SERVICE_FRONTEND}' not found or not ACTIVE in cluster '${ECS_CLUSTER}'"; exit 1; }
           TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition $ECS_TASK_FAMILY_FRONTEND \
-            --region $AWS_REGION \
+            --task-definition "$ECS_TASK_FAMILY_FRONTEND" \
+            --region "$AWS_REGION" \
             --query 'taskDefinition' --output json)
           NEW_DEF=$(echo "$TASK_DEF" | jq \
             --arg IMAGE "$IMAGE" \
             'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
-             .containerDefinitions[0].image = $IMAGE')
+             (.containerDefinitions[] | select(.name == "frontend")).image = $IMAGE')
           REVISION=$(aws ecs register-task-definition \
             --cli-input-json "$NEW_DEF" \
-            --region $AWS_REGION \
+            --region "$AWS_REGION" \
             --query 'taskDefinition.revision' --output text)
           aws ecs update-service \
-            --cluster $ECS_CLUSTER \
-            --service $ECS_SERVICE_FRONTEND \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_FRONTEND" \
             --task-definition "${ECS_TASK_FAMILY_FRONTEND}:${REVISION}" \
             --force-new-deployment \
-            --region $AWS_REGION
+            --region "$AWS_REGION"
           echo "✅ Frontend deployment triggered with ${ECS_TASK_FAMILY_FRONTEND}:${REVISION} (image: $IMAGE)"
 
       - name: Wait for Backend to stabilize

@@ -1,0 +1,345 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY_BACKEND: valor-assist-backend
+  ECR_REPOSITORY_FRONTEND: valor-assist-frontend
+  ECS_CLUSTER: valor-assist-prod-cluster
+  ECS_SERVICE_BACKEND: valor-assist-prod-backend-svc
+  ECS_SERVICE_FRONTEND: valor-assist-prod-frontend-svc
+  ECS_TASK_FAMILY_BACKEND: valor-assist-prod-backend
+  ECS_TASK_FAMILY_FRONTEND: valor-assist-prod-frontend
+
+jobs:
+  # ── Build and Push Docker Images to ECR ───────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      backend-image: ${{ steps.backend-image.outputs.image }}
+      frontend-image: ${{ steps.frontend-image.outputs.image }}
+      image-tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-cicd
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "registry=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
+
+      - name: Build, tag, and push backend image
+        id: backend-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          # Build backend image
+          docker build -f ./Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest \
+            .
+          
+          # Push images
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
+          
+          # Output image URI
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "✅ Backend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG"
+
+      - name: Build, tag, and push frontend image
+        id: frontend-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          # Build frontend image
+          docker build \
+            --build-arg VITE_API_URL="$VITE_API_URL" \
+            -f ./frontend/Dockerfile \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest \
+            ./frontend
+          
+          # Push images
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
+          
+          # Output image URI
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "✅ Frontend image pushed: $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG"
+
+  # ── Deploy to AWS ECS ──────────────────────────────────────────────
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify infrastructure prerequisites
+        run: |
+          echo "🔍 Verifying AWS infrastructure..."
+          
+          # Check if cluster exists
+          if ! aws ecs describe-clusters --clusters $ECS_CLUSTER --region $AWS_REGION --query 'clusters[0].clusterName' --output text 2>/dev/null | grep -q "$ECS_CLUSTER"; then
+            echo "❌ ECS Cluster '$ECS_CLUSTER' not found in region $AWS_REGION"
+            exit 1
+          fi
+          echo "✅ ECS Cluster '$ECS_CLUSTER' exists"
+          
+          # Check if ECR repositories exist
+          for repo in $ECR_REPOSITORY_BACKEND $ECR_REPOSITORY_FRONTEND; do
+            if ! aws ecr describe-repositories --repository-names $repo --region $AWS_REGION >/dev/null 2>&1; then
+              echo "❌ ECR Repository '$repo' not found"
+              exit 1
+            fi
+            echo "✅ ECR Repository '$repo' exists"
+          done
+
+      - name: Deploy Backend Service
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.backend-image }}
+        run: |
+          echo "🚀 Deploying backend service..."
+          
+          # Check if task definition exists, if not create a basic one
+          if ! aws ecs describe-task-definition --task-definition $ECS_TASK_FAMILY_BACKEND --region $AWS_REGION >/dev/null 2>&1; then
+            echo "⚠️  Task definition '$ECS_TASK_FAMILY_BACKEND' not found. You need to create it first."
+            echo "Please create the task definition manually or through infrastructure as code."
+            exit 1
+          fi
+          
+          # Get current task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition $ECS_TASK_FAMILY_BACKEND \
+            --region $AWS_REGION \
+            --query 'taskDefinition' --output json)
+          
+          # Update task definition with new image
+          NEW_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$IMAGE_URI" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions[0].image = $IMAGE')
+          
+          # Register new task definition
+          REVISION=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_DEF" \
+            --region $AWS_REGION \
+            --query 'taskDefinition.revision' --output text)
+          
+          echo "✅ New task definition registered: ${ECS_TASK_FAMILY_BACKEND}:${REVISION}"
+          
+          # Check if service exists, create if it doesn't
+          if ! aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE_BACKEND --region $AWS_REGION --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$ECS_SERVICE_BACKEND"; then
+            echo "⚠️  Service '$ECS_SERVICE_BACKEND' not found. Creating it..."
+            
+            aws ecs create-service \
+              --cluster $ECS_CLUSTER \
+              --service-name $ECS_SERVICE_BACKEND \
+              --task-definition "${ECS_TASK_FAMILY_BACKEND}:${REVISION}" \
+              --desired-count 1 \
+              --region $AWS_REGION \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}"
+            
+            echo "✅ Service '$ECS_SERVICE_BACKEND' created"
+          else
+            # Update existing service
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_SERVICE_BACKEND \
+              --task-definition "${ECS_TASK_FAMILY_BACKEND}:${REVISION}" \
+              --force-new-deployment \
+              --region $AWS_REGION
+            
+            echo "✅ Service '$ECS_SERVICE_BACKEND' updated"
+          fi
+          
+          echo "🎯 Backend deployment initiated with ${ECS_TASK_FAMILY_BACKEND}:${REVISION}"
+
+      - name: Deploy Frontend Service
+        env:
+          IMAGE_URI: ${{ needs.build-and-push.outputs.frontend-image }}
+        run: |
+          echo "🚀 Deploying frontend service..."
+          
+          # Check if task definition exists
+          if ! aws ecs describe-task-definition --task-definition $ECS_TASK_FAMILY_FRONTEND --region $AWS_REGION >/dev/null 2>&1; then
+            echo "⚠️  Task definition '$ECS_TASK_FAMILY_FRONTEND' not found. You need to create it first."
+            echo "Please create the task definition manually or through infrastructure as code."
+            exit 1
+          fi
+          
+          # Get current task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition $ECS_TASK_FAMILY_FRONTEND \
+            --region $AWS_REGION \
+            --query 'taskDefinition' --output json)
+          
+          # Update task definition with new image
+          NEW_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$IMAGE_URI" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) |
+             .containerDefinitions[0].image = $IMAGE')
+          
+          # Register new task definition
+          REVISION=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_DEF" \
+            --region $AWS_REGION \
+            --query 'taskDefinition.revision' --output text)
+          
+          echo "✅ New task definition registered: ${ECS_TASK_FAMILY_FRONTEND}:${REVISION}"
+          
+          # Check if service exists, create if it doesn't
+          if ! aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE_FRONTEND --region $AWS_REGION --query 'services[0].serviceName' --output text 2>/dev/null | grep -q "$ECS_SERVICE_FRONTEND"; then
+            echo "⚠️  Service '$ECS_SERVICE_FRONTEND' not found. Creating it..."
+            
+            aws ecs create-service \
+              --cluster $ECS_CLUSTER \
+              --service-name $ECS_SERVICE_FRONTEND \
+              --task-definition "${ECS_TASK_FAMILY_FRONTEND}:${REVISION}" \
+              --desired-count 1 \
+              --region $AWS_REGION \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}"
+            
+            echo "✅ Service '$ECS_SERVICE_FRONTEND' created"
+          else
+            # Update existing service
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_SERVICE_FRONTEND \
+              --task-definition "${ECS_TASK_FAMILY_FRONTEND}:${REVISION}" \
+              --force-new-deployment \
+              --region $AWS_REGION
+            
+            echo "✅ Service '$ECS_SERVICE_FRONTEND' updated"
+          fi
+          
+          echo "🎯 Frontend deployment initiated with ${ECS_TASK_FAMILY_FRONTEND}:${REVISION}"
+
+      - name: Wait for deployments to stabilize
+        run: |
+          echo "⏳ Waiting for services to stabilize..."
+          
+          # Wait for backend service
+          echo "Waiting for backend service..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" \
+            --region "$AWS_REGION"
+          echo "✅ Backend service is stable"
+          
+          # Wait for frontend service
+          echo "Waiting for frontend service..."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_FRONTEND" \
+            --region "$AWS_REGION"
+          echo "✅ Frontend service is stable"
+
+      - name: Deployment Summary
+        run: |
+          echo "🎉 Deployment Summary"
+          echo "===================="
+          echo "✅ Backend Image: ${{ needs.build-and-push.outputs.backend-image }}"
+          echo "✅ Frontend Image: ${{ needs.build-and-push.outputs.frontend-image }}"
+          echo "✅ Cluster: $ECS_CLUSTER"
+          echo "✅ Backend Service: $ECS_SERVICE_BACKEND"
+          echo "✅ Frontend Service: $ECS_SERVICE_FRONTEND"
+          echo "🚀 All services deployed successfully!"
+
+  # ── Rollback on Failure ────────────────────────────────────────────
+  rollback:
+    needs: [build-and-push, deploy]
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-rollback
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rollback on deployment failure
+        run: |
+          echo "🔄 Deployment failed, checking for rollback options..."
+          
+          # Get previous stable task definition for backend
+          PREV_BACKEND_TASK_DEF=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE_BACKEND \
+            --region $AWS_REGION \
+            --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
+          
+          # Get previous stable task definition for frontend
+          PREV_FRONTEND_TASK_DEF=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE_FRONTEND \
+            --region $AWS_REGION \
+            --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$PREV_BACKEND_TASK_DEF" && "$PREV_BACKEND_TASK_DEF" != "None" ]]; then
+            echo "🔄 Rolling back backend to: $PREV_BACKEND_TASK_DEF"
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_SERVICE_BACKEND \
+              --task-definition "$PREV_BACKEND_TASK_DEF" \
+              --region $AWS_REGION
+          fi
+          
+          if [[ -n "$PREV_FRONTEND_TASK_DEF" && "$PREV_FRONTEND_TASK_DEF" != "None" ]]; then
+            echo "🔄 Rolling back frontend to: $PREV_FRONTEND_TASK_DEF"
+            aws ecs update-service \
+              --cluster $ECS_CLUSTER \
+              --service $ECS_SERVICE_FRONTEND \
+              --task-definition "$PREV_FRONTEND_TASK_DEF" \
+              --region $AWS_REGION
+          fi
+          
+          echo "⚠️  Rollback completed. Please check the deployment logs and fix issues before retrying."
+          

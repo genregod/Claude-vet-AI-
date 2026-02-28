@@ -1,11 +1,13 @@
 /**
  * Valor Assist — API Client
  *
- * Centralizes all backend calls. In Docker, requests go through the
- * nginx proxy (/api → backend:8000). In dev, Vite proxy handles it.
+ * Centralizes all backend calls. In ECS, VITE_API_URL is baked in at
+ * build time so requests go directly to the backend. In dev, Vite proxy
+ * handles /api routing.
  */
 
-const BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const BASE = API_BASE ? `${API_BASE}/api` : '/api';
 
 async function request(path, options = {}) {
   const token = localStorage.getItem('access_token');

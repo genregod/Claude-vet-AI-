@@ -1,5 +1,6 @@
 # Valor Assist — AI Veterans Claims Assistant
 
+
 An AI-powered assistant that helps U.S. military veterans navigate VA disability
 claims, appeals, and 38 CFR regulations. Built with **FastAPI** (Python) on the
 backend and **Vite/React** (TypeScript) on the frontend, using Claude 3.5 Sonnet

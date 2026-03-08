@@ -1,0 +1,162 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Lambda function for processing veteran document uploads",
+  "Parameters": {
+    "env": {
+      "Type": "String"
+    },
+    "documentsName": {
+      "Type": "String"
+    },
+    "documentsArn": {
+      "Type": "String"
+    },
+    "claudevetaidocsBucketName": {
+      "Type": "String"
+    },
+    "claudevetaidocsBucketArn": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "LambdaFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "documentProcessor-${env}"
+        },
+        "Handler": "index.handler",
+        "Runtime": "nodejs18.x",
+        "Timeout": 60,
+        "MemorySize": 512,
+        "Environment": {
+          "Variables": {
+            "ENV": {
+              "Ref": "env"
+            },
+            "DOCUMENTS_TABLE": {
+              "Ref": "documentsName"
+            },
+            "S3_BUCKET": {
+              "Ref": "claudevetaidocsBucketName"
+            }
+          }
+        },
+        "Role": {
+          "Fn::GetAtt": ["LambdaExecutionRole", "Arn"]
+        }
+      }
+    },
+    "LambdaExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "DynamoDBAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": {
+                    "Ref": "documentsArn"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "S3Access",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    {
+                      "Ref": "claudevetaidocsBucketArn"
+                    },
+                    {
+                      "Fn::Sub": "${claudevetaidocsBucketArn}/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "TextractAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "textract:DetectDocumentText",
+                    "textract:AnalyzeDocument"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "S3TriggerPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "LambdaFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "s3.amazonaws.com",
+        "SourceArn": {
+          "Ref": "claudevetaidocsBucketArn"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "FunctionName": {
+      "Value": {
+        "Ref": "LambdaFunction"
+      }
+    },
+    "FunctionArn": {
+      "Value": {
+        "Fn::GetAtt": ["LambdaFunction", "Arn"]
+      }
+    },
+    "LambdaExecutionRole": {
+      "Value": {
+        "Ref": "LambdaExecutionRole"
+      }
+    }
+  }
+}

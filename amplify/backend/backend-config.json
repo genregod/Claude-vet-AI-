@@ -19,6 +19,23 @@
           "attributes": ["Name", "Arn"]
         }
       ]
+    },
+    "documentProcessor": {
+      "build": true,
+      "providerPlugin": "@aws-amplify/cli-plugin-provider-awscloudformation",
+      "service": "Lambda",
+      "dependsOn": [
+        {
+          "category": "storage",
+          "resourceName": "documents",
+          "attributes": ["Name", "Arn"]
+        },
+        {
+          "category": "storage",
+          "resourceName": "claudevetaidocs",
+          "attributes": ["BucketName", "BucketArn"]
+        }
+      ]
     }
   },
   "storage": {

@@ -1,0 +1,79 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "DynamoDB table for veteran document metadata",
+  "Parameters": {
+    "tableName": {
+      "Type": "String"
+    },
+    "partitionKeyName": {
+      "Type": "String"
+    },
+    "partitionKeyType": {
+      "Type": "String"
+    },
+    "sortKeyName": {
+      "Type": "String"
+    },
+    "sortKeyType": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "DynamoDBTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Ref": "tableName"
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": {
+              "Ref": "partitionKeyName"
+            },
+            "AttributeType": {
+              "Ref": "partitionKeyType"
+            }
+          },
+          {
+            "AttributeName": {
+              "Ref": "sortKeyName"
+            },
+            "AttributeType": {
+              "Ref": "sortKeyType"
+            }
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": {
+              "Ref": "partitionKeyName"
+            },
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": {
+              "Ref": "sortKeyName"
+            },
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    }
+  },
+  "Outputs": {
+    "Name": {
+      "Value": {
+        "Ref": "DynamoDBTable"
+      }
+    },
+    "Arn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "DynamoDBTable",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

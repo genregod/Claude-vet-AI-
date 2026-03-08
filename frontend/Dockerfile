@@ -18,6 +18,7 @@ RUN npm install
 
 # Copy source code
 COPY index.html ./
+COPY public/ ./public/
 COPY src/ ./src/
 
 # Optional API origin for deployed frontend (e.g., https://api.example.com)

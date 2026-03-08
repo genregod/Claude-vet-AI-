@@ -16,6 +16,7 @@ RUN npm ci --only=production=false
 
 # Copy source code
 COPY index.html ./
+COPY public/ ./public/
 COPY src/ ./src/
 
 # Build the app

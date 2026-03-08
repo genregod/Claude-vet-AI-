@@ -1,11 +1,12 @@
 {
   "name": "chatbot",
-  "version": "2.0.0",
-  "description": "Lambda function for Claude chatbot",
+  "version": "2.1.0",
+  "description": "Lambda function for Claude chatbot via Bedrock",
   "main": "index.js",
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
-    "aws-sdk": "^2.1691.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
   }
 }

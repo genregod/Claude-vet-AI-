@@ -1,10 +1,15 @@
-const AWS = require('aws-sdk');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { TextractClient, DetectDocumentTextCommand } = require('@aws-sdk/client-textract');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-const s3 = new AWS.S3();
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const textract = new AWS.Textract();
-const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+const region = process.env.AWS_REGION;
+const s3 = new S3Client({ region });
+const textract = new TextractClient({ region });
+const ddbClient = new DynamoDBClient({ region });
+const dynamodb = DynamoDBDocumentClient.from(ddbClient);
+const bedrock = new BedrockRuntimeClient({ region });
 
 exports.handler = async (event) => {
     const headers = {
@@ -13,8 +18,21 @@ exports.handler = async (event) => {
         "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
     };
 
+    // Handle CORS preflight
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
+    }
+
     try {
         const { fileName, userId, documentType } = JSON.parse(event.body);
+
+        if (!fileName || !userId) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'fileName and userId are required' })
+            };
+        }
 
         // Process document with Textract
         const extractedText = await extractTextFromDocument(fileName, userId);
@@ -45,33 +63,32 @@ exports.handler = async (event) => {
 };
 
 async function extractTextFromDocument(fileName, userId) {
-    const params = {
+    const command = new DetectDocumentTextCommand({
         Document: {
             S3Object: {
                 Bucket: process.env.STORAGE_BUCKET,
-                Name: `public/${userId}/${fileName}`
+                Name: `private/${userId}/${fileName}`
             }
         }
-    };
+    });
 
-    const result = await textract.detectDocumentText(params).promise();
-    return result.Blocks
+    const result = await textract.send(command);
+    return (result.Blocks || [])
         .filter(block => block.BlockType === 'LINE')
         .map(block => block.Text)
         .join('\n');
 }
 
 async function generateEmbeddings(text) {
-    const params = {
+    const command = new InvokeModelCommand({
         modelId: 'amazon.titan-embed-text-v1',
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
-            inputText: text
+            inputText: text.substring(0, 8000) // Titan embed limit
         })
-    };
+    });
 
-    const command = new InvokeModelCommand(params);
     const response = await bedrock.send(command);
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
 
@@ -79,19 +96,19 @@ async function generateEmbeddings(text) {
 }
 
 async function storeDocumentMetadata(userId, fileName, documentType, extractedText, embeddings) {
-    const params = {
+    const command = new PutCommand({
         TableName: process.env.DOCUMENTS_TABLE,
         Item: {
             userId: userId,
             documentId: `${userId}/${fileName}`,
             fileName: fileName,
-            documentType: documentType,
+            documentType: documentType || 'unknown',
             extractedText: extractedText,
             embeddings: embeddings,
             uploadDate: new Date().toISOString(),
             processed: true
         }
-    };
+    });
 
-    await dynamodb.put(params).promise();
+    await dynamodb.send(command);
 }

@@ -1,10 +1,17 @@
 version: 1
+backend:
+  phases:
+    build:
+      commands:
+        - '# Install Lambda function dependencies'
+        - cd amplify/backend/function/chatbot/src && npm ci
+        - cd amplify/backend/function/documentProcessor/src && npm ci
 frontend:
   phases:
     preBuild:
       commands:
-        - nvm install 18
-        - nvm use 18
+        - nvm install 20
+        - nvm use 20
         - node -v
         - npm ci --prefix frontend
     build:
@@ -17,6 +24,8 @@ frontend:
   cache:
     paths:
       - frontend/node_modules/**/*
+      - amplify/backend/function/chatbot/src/node_modules/**/*
+      - amplify/backend/function/documentProcessor/src/node_modules/**/*
   customHeaders:
     - pattern: '**/*'
       headers:
@@ -26,5 +35,19 @@ frontend:
           value: nosniff
         - key: X-XSS-Protection
           value: '1; mode=block'
+        - key: Strict-Transport-Security
+          value: 'max-age=31536000; includeSubDomains'
+        - key: Referrer-Policy
+          value: strict-origin-when-cross-origin
+        - key: Permissions-Policy
+          value: 'camera=(), microphone=(), geolocation=()'
+    - pattern: '/assets/*'
+      headers:
+        - key: Cache-Control
+          value: 'public, max-age=31536000, immutable'
   buildSizeConfig:
     maxBuildSize: 200MB
+customRules:
+  - source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
+    target: /index.html
+    status: '200'

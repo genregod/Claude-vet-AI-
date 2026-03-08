@@ -9,7 +9,7 @@
  * - Claimable conditions lookup
  */
 
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, buildApiUrl } from "@/lib/queryClient";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ export async function uploadMilitaryRecords(
   formData.append("file", file);
 
   // Use fetch directly for multipart/form-data (apiRequest sends JSON)
-  const res = await fetch(`/api/claims/session/${sessionId}/upload`, {
+  const res = await fetch(buildApiUrl(`/claims/session/${sessionId}/upload`), {
     method: "POST",
     body: formData,
     credentials: "include",

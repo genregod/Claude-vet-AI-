@@ -9,15 +9,21 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+/** Build a full API URL from a path like "/claims/session". Shared with claimsApi for direct fetch calls. */
+export function buildApiUrl(path: string): string {
+  if (API_BASE) {
+    const cleanPath = path.startsWith("/api") ? path.slice(4) : path;
+    return `${API_BASE}${cleanPath}`;
+  }
+  return path.startsWith("/api") ? path : `/api${path}`;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Prepend /api so requests route through the Vite proxy (dev)
-  // and use VITE_API_URL in production deployments when provided.
-  const apiPath = url.startsWith("/api") ? url : `/api${url}`;
-  const apiUrl = API_BASE ? `${API_BASE}${apiPath}` : apiPath;
+  const apiUrl = buildApiUrl(url);
   const res = await fetch(apiUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},

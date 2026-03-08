@@ -1,0 +1,7 @@
+{
+  "tableName": "documents",
+  "partitionKeyName": "userId",
+  "partitionKeyType": "S",
+  "sortKeyName": "documentId",
+  "sortKeyType": "S"
+}

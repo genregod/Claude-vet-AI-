@@ -1,0 +1,7 @@
+{
+  "tableName": "userprofiles",
+  "partitionKeyName": "userId",
+  "partitionKeyType": "S",
+  "sortKeyName": "createdAt",
+  "sortKeyType": "N"
+}

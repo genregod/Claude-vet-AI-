@@ -1,0 +1,9 @@
+{
+  "bucketName": "claudevetaidocs",
+  "authRoleName": {
+    "Ref": "AuthRoleName"
+  },
+  "env": {
+    "Ref": "env"
+  }
+}

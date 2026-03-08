@@ -1,0 +1,7 @@
+{
+  "tableName": "chathistory",
+  "partitionKeyName": "sessionId",
+  "partitionKeyType": "S",
+  "sortKeyName": "timestamp",
+  "sortKeyType": "N"
+}

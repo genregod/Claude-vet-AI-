@@ -1,0 +1,105 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "S3 bucket for veteran document uploads",
+  "Parameters": {
+    "bucketName": {
+      "Type": "String"
+    },
+    "authRoleName": {
+      "Type": "String"
+    },
+    "env": {
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "${bucketName}-${env}"
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedHeaders": ["*"],
+              "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+              "AllowedOrigins": ["*"],
+              "MaxAge": 3000
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      }
+    },
+    "S3AuthPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "S3AuthPolicy",
+        "Roles": [
+          {
+            "Ref": "authRoleName"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+              "Resource": {
+                "Fn::Sub": "arn:aws:s3:::${S3Bucket}/private/${!aws:userid}/*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:ListBucket"],
+              "Resource": {
+                "Fn::GetAtt": ["S3Bucket", "Arn"]
+              },
+              "Condition": {
+                "StringLike": {
+                  "s3:prefix": ["private/${aws:userid}/*"]
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Value": {
+        "Ref": "S3Bucket"
+      }
+    },
+    "BucketArn": {
+      "Value": {
+        "Fn::GetAtt": ["S3Bucket", "Arn"]
+      }
+    },
+    "Region": {
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    }
+  }
+}

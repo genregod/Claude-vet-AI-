@@ -37,6 +37,7 @@ from app.auth import (
     create_token_pair,
     decode_access_token,
 )
+from app.cognito_auth import decode_cognito_token, is_cognito_token
 from app.config import settings
 from app.pii_shield import AuditEntry, audit_log, field_encryptor
 from app.va_integration import VALighthouseClient
@@ -71,6 +72,12 @@ async def get_current_user(request: Request) -> UserProfile:
     FastAPI dependency: extracts the Bearer token from the Authorization
     header, validates it, and returns the UserProfile.
 
+    Supports two token types:
+      1. Cognito RS256 tokens (from Amplify Auth)
+      2. Legacy HS256 tokens (from our custom auth system)
+
+    For Cognito tokens, auto-provisions a UserProfile on first login.
+
     Use as: current_user: UserProfile = Depends(get_current_user)
     """
     auth_header = request.headers.get("Authorization", "")
@@ -82,17 +89,49 @@ async def get_current_user(request: Request) -> UserProfile:
         )
 
     token = auth_header[7:]
-    payload = decode_access_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Token expired or invalid. Please log in again.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
-    user = user_store.get_user(payload["sub"])
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found.")
+    # Route to the appropriate verification path
+    if is_cognito_token(token):
+        payload = decode_cognito_token(token)
+        if payload is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Cognito token expired or invalid. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Cognito 'sub' is the unique user ID, email from token claims
+        cognito_sub = payload["sub"]
+        email = payload.get("email", "")
+
+        # Auto-provision or retrieve user from store
+        user = user_store.get_user(cognito_sub)
+        if user is None:
+            user = user_store.create_user(
+                email=email,
+                provider=AuthProvider.OAUTH_GOOGLE,  # mapped as generic OAuth
+                first_name=payload.get("given_name", ""),
+                last_name=payload.get("family_name", ""),
+                verification_level=VerificationLevel.LOA1,
+            )
+            # Override the auto-generated user_id with Cognito sub
+            user_store._users.pop(user.user_id, None)
+            user.user_id = cognito_sub
+            user_store._users[cognito_sub] = user
+            user_store._email_index[email.lower()] = cognito_sub
+            logger.info("Auto-provisioned Cognito user %s (%s)", cognito_sub, email)
+    else:
+        payload = decode_access_token(token)
+        if payload is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Token expired or invalid. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user = user_store.get_user(payload["sub"])
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found.")
 
     # Liveness check: verify user has been active recently
     if not LivenessChecker.check_session_activity(user.last_login):

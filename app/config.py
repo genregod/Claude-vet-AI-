@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     idme_client_secret: str = ""
     idme_redirect_uri: str = "http://localhost:3000/auth/idme/callback"
 
+    # AWS Cognito (primary authentication via Amplify)
+    cognito_user_pool_id: str = ""
+    cognito_app_client_id: str = ""
+    cognito_identity_pool_id: str = ""
+    cognito_region: str = "us-east-1"
+
     # Liveness / engagement timeout (seconds of inactivity before re-auth)
     liveness_timeout_seconds: int = 1800  # 30 minutes
 

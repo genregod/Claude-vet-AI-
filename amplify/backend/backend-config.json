@@ -1,4 +1,27 @@
 {
+  "api": {
+    "claudevetaiapi": {
+      "service": "API Gateway",
+      "providerPlugin": "@aws-amplify/cli-plugin-provider-awscloudformation",
+      "dependsOn": [
+        {
+          "category": "function",
+          "resourceName": "chatbot",
+          "attributes": ["FunctionArn"]
+        },
+        {
+          "category": "function",
+          "resourceName": "documentProcessor",
+          "attributes": ["FunctionArn"]
+        },
+        {
+          "category": "auth",
+          "resourceName": "claudevetai",
+          "attributes": ["UserPoolId"]
+        }
+      ]
+    }
+  },
   "auth": {
     "claudevetai": {
       "service": "Cognito",

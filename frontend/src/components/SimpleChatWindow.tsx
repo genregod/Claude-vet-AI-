@@ -15,9 +15,10 @@ interface Message {
 }
 
 interface ChatResponse {
-  answer: string;
+  response: string;
+  sessionId?: string;
+  answer?: string;  // fallback field name
   sources?: any[];
-  model?: string;
 }
 
 interface SimpleChatWindowProps {
@@ -49,7 +50,9 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
   useEffect(() => {
     const createSession = async () => {
       try {
-        const response = await apiRequest("POST", "/chat/session", {});
+        const response = await apiRequest("POST", "/chat/onboarding-chat", {
+          message: "start_session"
+        });
         const data = await response.json();
         setSessionId(data.session_id);
       } catch (error) {
@@ -96,10 +99,10 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
       setMessage("");
       
       try {
-        // Send message to FastAPI backend
-        const response = await apiRequest("POST", "/chat", {
-          question: userMessage.content,
-          session_id: sessionId
+        // Send message to backend chat endpoint
+        const response = await apiRequest("POST", "/chat/chat", {
+          message: userMessage.content,
+          sessionId: sessionId
         });
         const chatResponse: ChatResponse = await response.json();
         
@@ -109,7 +112,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
             msg.id === loadingMessage.id 
               ? { 
                   ...msg, 
-                  content: chatResponse.answer, 
+                  content: chatResponse.response || chatResponse.answer || "No response received", 
                   isLoading: false,
                   sources: chatResponse.sources 
                 }
@@ -161,9 +164,9 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
     setMessage("");
     
     try {
-      const response = await apiRequest("POST", "/chat/quick-action", {
-        action: action.toLowerCase().replace(/\s+/g, '_'),
-        session_id: sessionId
+      const response = await apiRequest("POST", "/chat/onboarding-chat", {
+        message: action,
+        sessionId: sessionId
       });
       const chatResponse: ChatResponse = await response.json();
       
@@ -172,7 +175,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
           msg.id === loadingMessage.id 
             ? { 
                 ...msg, 
-                content: chatResponse.answer, 
+                content: chatResponse.response || chatResponse.answer || "No response received", 
                 isLoading: false,
                 sources: chatResponse.sources 
               }

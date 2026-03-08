@@ -16,7 +16,8 @@ frontend:
         - npm ci --prefix frontend
     build:
       commands:
-        - npm run build --prefix frontend
+        - echo "VITE_API_URL=$VITE_API_URL"
+        - VITE_API_URL=${VITE_API_URL:-""} npm run build --prefix frontend
   artifacts:
     baseDirectory: frontend/dist
     files:

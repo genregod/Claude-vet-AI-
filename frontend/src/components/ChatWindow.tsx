@@ -37,7 +37,7 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
   // Create chat user mutation
   const createChatUserMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/chat/users");
+      const res = await apiRequest("POST", "/chat/chat");
       return await res.json();
     },
     onSuccess: (data) => {
@@ -57,7 +57,7 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
     mutationFn: async () => {
       if (!chatUser) throw new Error("Chat user not initialized");
       
-      const res = await apiRequest("POST", "/api/chat/threads", {
+      const res = await apiRequest("POST", "/chat/threads", {
         userDisplayName: user?.username || "Veteran User",
         userCommunicationId: chatUser.communicationUserId,
         supportDisplayName: "VA Support Agent",

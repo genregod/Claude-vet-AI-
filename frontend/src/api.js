@@ -134,24 +134,26 @@ export async function logout() {
 // ── Chat ────────────────────────────────────────────────────────────
 
 export async function createChatSession() {
-  return request('/chat/session', { method: 'POST' });
+  return request('/chat/onboarding-chat', {
+    method: 'POST',
+    body: JSON.stringify({ message: 'start_session' }),
+  });
 }
 
-export async function sendMessage(question, sessionId, sourceTypeFilter) {
-  return request('/chat', {
+export async function sendMessage(message, sessionId) {
+  return request('/chat/chat', {
     method: 'POST',
     body: JSON.stringify({
-      question,
-      session_id: sessionId || undefined,
-      source_type_filter: sourceTypeFilter || undefined,
+      message,
+      sessionId: sessionId || undefined,
     }),
   });
 }
 
 export async function sendQuickAction(action, sessionId) {
-  return request('/chat/quick-action', {
+  return request('/chat/onboarding-chat', {
     method: 'POST',
-    body: JSON.stringify({ action, session_id: sessionId || undefined }),
+    body: JSON.stringify({ message: action, sessionId: sessionId || undefined }),
   });
 }
 

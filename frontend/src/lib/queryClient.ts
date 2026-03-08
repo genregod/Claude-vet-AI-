@@ -9,13 +9,18 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-/** Build a full API URL from a path like "/claims/session". Shared with claimsApi for direct fetch calls. */
+/**
+ * Build a full API URL from a path like "/auth/signup".
+ *
+ * In production: VITE_API_URL (e.g. https://xyz.execute-api.us-east-1.amazonaws.com/prod)
+ *   → prepends /api prefix → https://xyz.../prod/api/auth/signup
+ * In dev: no VITE_API_URL → prepends /api for Vite proxy → /api/auth/signup
+ *
+ * The backend routes all live under /api/* so the prefix is always kept.
+ */
 export function buildApiUrl(path: string): string {
-  if (API_BASE) {
-    const cleanPath = path.startsWith("/api") ? path.slice(4) : path;
-    return `${API_BASE}${cleanPath}`;
-  }
-  return path.startsWith("/api") ? path : `/api${path}`;
+  const apiPath = path.startsWith("/api") ? path : `/api${path}`;
+  return API_BASE ? `${API_BASE}${apiPath}` : apiPath;
 }
 
 export async function apiRequest(

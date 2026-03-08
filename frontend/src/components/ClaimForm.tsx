@@ -135,7 +135,7 @@ export function ClaimForm() {
     }
 
     try {
-      await apiRequest("POST", "/api/claims", formData);
+      await apiRequest("POST", "/claims", formData);
 
       toast({
         title: "Claim Submitted",

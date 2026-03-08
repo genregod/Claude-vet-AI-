@@ -207,10 +207,18 @@ export async function createClaimSession(data: {
   first_name: string;
   last_name: string;
 }): Promise<{ session_id: string; current_page: string; total_pages: number }> {
-  const res = await apiRequest("POST", "/claims/session", data);
+  const res = await apiRequest("POST", "/auth/signup", data);
   const json = await res.json();
-  saveSessionToStorage(json.session_id);
-  return json;
+  // Backend returns session info — store tokens if provided
+  if (json.access_token) {
+    localStorage.setItem("access_token", json.access_token);
+  }
+  if (json.refresh_token) {
+    localStorage.setItem("refresh_token", json.refresh_token);
+  }
+  const sessionId = json.session_id || json.userId || `session_${Date.now()}`;
+  saveSessionToStorage(sessionId);
+  return { session_id: sessionId, current_page: "personal_info", total_pages: 10, ...json };
 }
 
 export async function getClaimSession(sessionId: string): Promise<ClaimSessionStatus> {

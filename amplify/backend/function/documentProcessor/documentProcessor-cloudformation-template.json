@@ -37,7 +37,7 @@
             "DOCUMENTS_TABLE": {
               "Ref": "documentsName"
             },
-            "S3_BUCKET": {
+            "STORAGE_BUCKET": {
               "Ref": "claudevetaidocsBucketName"
             }
           }
@@ -121,6 +121,24 @@
                     "textract:AnalyzeDocument"
                   ],
                   "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "BedrockAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel"
+                  ],
+                  "Resource": [
+                    "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1",
+                    "arn:aws:bedrock:*::foundation-model/anthropic.*"
+                  ]
                 }
               ]
             }

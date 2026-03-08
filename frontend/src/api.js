@@ -1,25 +1,50 @@
 /**
  * Valor Assist — API Client
  *
- * Centralizes all backend calls. In ECS, VITE_API_URL is baked in at
- * build time so requests go directly to the backend. In dev, Vite proxy
- * handles /api routing.
+ * Centralizes all backend calls. Supports two auth modes:
+ *   1. Cognito (primary) — uses Amplify Auth JWT tokens
+ *   2. Legacy JWT (fallback) — uses custom backend-issued tokens
+ *
+ * The client auto-detects which mode is active based on whether
+ * a Cognito session exists. In ECS, VITE_API_URL is baked in at
+ * build time so requests go directly to the backend. In dev, Vite
+ * proxy handles /api routing.
  */
+
+import { fetchAuthSession } from 'aws-amplify/auth';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
 const BASE = API_BASE ? `${API_BASE}/api` : '/api';
 
+/**
+ * Try to get the Cognito ID token first; fall back to localStorage.
+ */
+async function getAuthToken() {
+  try {
+    const session = await fetchAuthSession();
+    const idToken = session.tokens?.idToken?.toString();
+    if (idToken) return idToken;
+  } catch {
+    // No Cognito session — fall through to legacy
+  }
+  return localStorage.getItem('access_token');
+}
+
 async function request(path, options = {}) {
-  const token = localStorage.getItem('access_token');
+  const token = await getAuthToken();
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    // Try refresh
-    const refreshed = await refreshToken();
-    if (refreshed) return request(path, options);
+    // Cognito handles its own token refresh via fetchAuthSession,
+    // so only attempt manual refresh for legacy tokens.
+    const isLegacy = localStorage.getItem('access_token');
+    if (isLegacy) {
+      const refreshed = await refreshToken();
+      if (refreshed) return request(path, options);
+    }
     localStorage.clear();
     window.location.href = '/login';
     throw new Error('Session expired');

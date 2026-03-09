@@ -1,21 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { MessageCircle, Send, X, User, Bot } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-// import { useAuth } from "@/hooks/use-auth";
+import { MessageCircle, Send, X, User, Bot, Loader2 } from "lucide-react";
 
 interface Message {
   id: string;
   content: string;
-  senderId: string;
-  senderDisplayName: string;
   timestamp: Date;
   isUser: boolean;
+  isLoading?: boolean;
 }
 
 interface ChatWindowProps {
@@ -25,129 +21,35 @@ interface ChatWindowProps {
 
 export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [currentThread, setCurrentThread] = useState<string | null>(null);
-  const [chatUser, setChatUser] = useState<any>(null);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      content: "Hello! I'm Valor Assist. How can I help with your VA claim today?",
+      timestamp: new Date(),
+      isUser: false,
+    },
+  ]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
-  // const { user } = useAuth();
-  const user = { username: "Test User" }; // Temporary fix
-  const queryClient = useQueryClient();
 
-  // Create chat user mutation
-  const createChatUserMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/chat/chat");
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      setChatUser(data);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error creating chat user",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Create chat thread mutation
-  const createThreadMutation = useMutation({
-    mutationFn: async () => {
-      if (!chatUser) throw new Error("Chat user not initialized");
-      
-      const res = await apiRequest("POST", "/chat/threads", {
-        userDisplayName: user?.username || "Veteran User",
-        userCommunicationId: chatUser.communicationUserId,
-        supportDisplayName: "VA Support Agent",
-        supportCommunicationId: "support-agent-001",
-        topic: "Support Chat",
-      });
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      setCurrentThread(data.threadId);
-      toast({
-        title: "Connected to Support",
-        description: "You're now connected with a VA support agent.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error creating chat thread",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Send message mutation
-  const sendMessageMutation = useMutation({
-    mutationFn: async (content: string) => {
-      if (!currentThread || !chatUser) throw new Error("Chat not initialized");
-      
-      const res = await apiRequest("POST", `/api/chat/threads/${currentThread}/messages`, {
-        senderCommunicationId: chatUser.communicationUserId,
-        senderToken: chatUser.token,
-        content,
-      });
-      return await res.json();
-    },
-    onSuccess: () => {
-      setMessage("");
-      // Refetch messages after sending
-      queryClient.invalidateQueries({ queryKey: [`/api/chat/threads/${currentThread}/messages`] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error sending message",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Fetch messages
-  const { data: fetchedMessages } = useQuery({
-    queryKey: [`/api/chat/threads/${currentThread}/messages`],
-    queryFn: async () => {
-      if (!currentThread || !chatUser) return [];
-      const res = await apiRequest("GET", `/api/chat/threads/${currentThread}/messages?userToken=${chatUser.token}`);
-      return await res.json();
-    },
-    enabled: !!currentThread && !!chatUser,
-    refetchInterval: 2000, // Poll for new messages every 2 seconds
-  });
-
-  // Initialize chat when opened
+  // Create session on mount
   useEffect(() => {
-    if (isOpen && user && !chatUser && !createChatUserMutation.isPending) {
-      createChatUserMutation.mutate();
+    if (isOpen && !sessionId) {
+      const createSession = async () => {
+        try {
+          const res = await apiRequest("POST", "/chat/onboarding-chat", {
+            message: "start_session",
+          });
+          const data = await res.json();
+          setSessionId(data.session_id || `session_${Date.now()}`);
+        } catch {
+          setSessionId(`local_${Date.now()}`);
+        }
+      };
+      createSession();
     }
-  }, [isOpen, user, chatUser, createChatUserMutation]);
-
-  // Create thread after chat user is created
-  useEffect(() => {
-    if (chatUser && !currentThread && !createThreadMutation.isPending) {
-      createThreadMutation.mutate();
-    }
-  }, [chatUser, currentThread, createThreadMutation]);
-
-  // Update messages when fetched
-  useEffect(() => {
-    if (fetchedMessages?.messages) {
-      const formattedMessages: Message[] = fetchedMessages.messages.map((msg: any) => ({
-        id: msg.id,
-        content: msg.content,
-        senderId: msg.senderId,
-        senderDisplayName: msg.senderDisplayName,
-        timestamp: new Date(msg.createdOn),
-        isUser: msg.senderId === chatUser?.communicationUserId,
-      }));
-      setMessages(formattedMessages);
-    }
-  }, [fetchedMessages, chatUser]);
+  }, [isOpen, sessionId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -156,10 +58,52 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
     }
   }, [messages]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !sendMessageMutation.isPending) {
-      sendMessageMutation.mutate(message);
+    if (!message.trim() || isProcessing || !sessionId) return;
+
+    setIsProcessing(true);
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      content: message,
+      timestamp: new Date(),
+      isUser: true,
+    };
+    const loadingMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      content: "",
+      timestamp: new Date(),
+      isUser: false,
+      isLoading: true,
+    };
+
+    setMessages((prev) => [...prev, userMsg, loadingMsg]);
+    setMessage("");
+
+    try {
+      const res = await apiRequest("POST", "/chat/chat", {
+        message: userMsg.content,
+        sessionId,
+      });
+      const data = await res.json();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingMsg.id
+            ? { ...m, content: data.response || data.answer || "No response", isLoading: false }
+            : m
+        )
+      );
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === loadingMsg.id
+            ? { ...m, content: "Sorry, something went wrong. Please try again.", isLoading: false }
+            : m
+        )
+      );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -218,10 +162,19 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
                             : "bg-gray-100 text-gray-800 rounded-bl-none"
                         }`}
                       >
-                        <p className="text-sm">{msg.content}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {new Date(msg.timestamp).toLocaleTimeString()}
-                        </p>
+                        {msg.isLoading ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm">Thinking...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm">{msg.content}</p>
+                            <p className="text-xs opacity-70 mt-1">
+                              {new Date(msg.timestamp).toLocaleTimeString()}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -238,15 +191,19 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
               placeholder="Type your message..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              disabled={sendMessageMutation.isPending || !currentThread}
+              disabled={isProcessing}
               className="flex-1"
             />
             <Button
               type="submit"
-              disabled={sendMessageMutation.isPending || !message.trim() || !currentThread}
+              disabled={isProcessing || !message.trim()}
               className="bg-navy-700 hover:bg-navy-800 text-white"
             >
-              <Send className="h-4 w-4" />
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </form>
         </CardFooter>

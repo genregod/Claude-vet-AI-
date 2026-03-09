@@ -135,7 +135,7 @@ export function ClaimForm() {
     }
 
     try {
-      await apiRequest("POST", "/claims", formData);
+      await apiRequest("POST", "/auth/signup", formData);
 
       toast({
         title: "Claim Submitted",

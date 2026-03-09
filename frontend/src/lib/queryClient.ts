@@ -9,15 +9,26 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+/**
+ * Build a full API URL from a path like "/auth/signup".
+ *
+ * In production: VITE_API_URL (e.g. https://xyz.execute-api.us-east-1.amazonaws.com/prod)
+ *   → prepends /api prefix → https://xyz.../prod/api/auth/signup
+ * In dev: no VITE_API_URL → prepends /api for Vite proxy → /api/auth/signup
+ *
+ * The backend routes all live under /api/* so the prefix is always kept.
+ */
+export function buildApiUrl(path: string): string {
+  const apiPath = path.startsWith("/api") ? path : `/api${path}`;
+  return API_BASE ? `${API_BASE}${apiPath}` : apiPath;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Prepend /api so requests route through the Vite proxy (dev)
-  // and use VITE_API_URL in production deployments when provided.
-  const apiPath = url.startsWith("/api") ? url : `/api${url}`;
-  const apiUrl = API_BASE ? `${API_BASE}${apiPath}` : apiPath;
+  const apiUrl = buildApiUrl(url);
   const res = await fetch(apiUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},

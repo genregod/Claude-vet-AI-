@@ -3,13 +3,36 @@ frontend:
   phases:
     preBuild:
       commands:
-        - nvm install 18
-        - nvm use 18
+        - nvm install 20
+        - nvm use 20
         - node -v
-        - npm ci --prefix frontend
+        - cd frontend && npm ci
+        # Generate API config from Amplify environment variables
+        - mkdir -p src/config
+        - |
+          cat > src/config/api.js << 'EOL'
+          export const API_CONFIG = {
+            baseURL: '${VITE_API_URL:-https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod}',
+            region: '${VITE_AWS_REGION:-us-east-1}',
+            endpoints: {
+              chat: '/api/chat/chat',
+              onboarding: '/api/chat/onboarding-chat',
+              quickAction: '/api/chat/quick-action',
+              evaluate: '/api/chat/evaluate',
+              signup: '/api/auth/signup',
+              login: '/api/auth/login',
+              verifyEmail: '/api/auth/verify-email',
+              completeOnboarding: '/api/auth/complete-onboarding',
+              uploadDoc: '/api/documents/upload',
+              processDoc: '/api/documents/process',
+              listDocs: '/api/documents/list',
+              extractDoc: '/api/documents/extract'
+            }
+          };
+          EOL
     build:
       commands:
-        - npm run build --prefix frontend
+        - cd frontend && VITE_API_URL=${VITE_API_URL:-"https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod"} npm run build
   artifacts:
     baseDirectory: frontend/dist
     files:
@@ -26,5 +49,19 @@ frontend:
           value: nosniff
         - key: X-XSS-Protection
           value: '1; mode=block'
+        - key: Strict-Transport-Security
+          value: 'max-age=31536000; includeSubDomains'
+        - key: Referrer-Policy
+          value: strict-origin-when-cross-origin
+        - key: Permissions-Policy
+          value: 'camera=(), microphone=(), geolocation=()'
+    - pattern: '/assets/*'
+      headers:
+        - key: Cache-Control
+          value: 'public, max-age=31536000, immutable'
   buildSizeConfig:
     maxBuildSize: 200MB
+customRules:
+  - source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
+    target: /index.html
+    status: '200'

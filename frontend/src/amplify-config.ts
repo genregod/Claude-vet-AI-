@@ -1,19 +1,22 @@
 /**
  * Valor Assist — AWS Amplify Configuration
  *
- * Configures Amplify with Cognito User Pool and Identity Pool settings.
+ * Configures Amplify with Cognito Auth, API Gateway, and S3 Storage.
  * Values are injected via environment variables at build time.
  *
- * After provisioning Cognito (via Amplify CLI or AWS Console), set these
- * in your .env or Amplify environment variables:
+ * Required env vars (set in Amplify Console or .env):
  *
  *   VITE_AWS_REGION
  *   VITE_COGNITO_USER_POOL_ID
  *   VITE_COGNITO_USER_POOL_CLIENT_ID
  *   VITE_COGNITO_IDENTITY_POOL_ID
+ *   VITE_API_GATEWAY_URL
+ *   VITE_S3_BUCKET
  */
 
 import { type ResourcesConfig } from 'aws-amplify';
+
+const region = import.meta.env.VITE_AWS_REGION || 'us-east-1';
 
 const amplifyConfig: ResourcesConfig = {
   Auth: {
@@ -35,6 +38,20 @@ const amplifyConfig: ResourcesConfig = {
         requireNumbers: false,
         requireSpecialCharacters: false,
       },
+    },
+  },
+  API: {
+    REST: {
+      claudevetaiapi: {
+        endpoint: import.meta.env.VITE_API_GATEWAY_URL || '',
+        region,
+      },
+    },
+  },
+  Storage: {
+    S3: {
+      bucket: import.meta.env.VITE_S3_BUCKET || '',
+      region,
     },
   },
 };

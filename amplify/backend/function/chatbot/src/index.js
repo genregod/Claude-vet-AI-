@@ -1,24 +1,12 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const dynamodb = DynamoDBDocumentClient.from(ddbClient);
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
-exports.handler = async (event) => {
-    const headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-        "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
-    };
-
-    try {
-        const { message, sessionId, userId } = JSON.parse(event.body);
-
-        // Get chat history
-        const chatHistory = await getChatHistory(sessionId);
-
-        // Prepare context for battle buddy persona
-        const systemPrompt = `You are a helpful battle buddy assistant for veterans completing Federal Disability Questionnaires (FDQ).
+const SYSTEM_PROMPT = `You are a helpful battle buddy assistant for veterans completing Federal Disability Questionnaires (FDQ).
 
 Key traits:
 - Speak like a supportive military peer, not overly formal
@@ -30,9 +18,34 @@ Key traits:
 
 Your role is to help veterans navigate the FDQ process, understand requirements, and organize their documentation effectively.`;
 
-        // Prepare messages for Claude
+exports.handler = async (event) => {
+    const headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+        "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+    };
+
+    // Handle CORS preflight
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
+    }
+
+    try {
+        const { message, sessionId, userId } = JSON.parse(event.body);
+
+        if (!message || !sessionId) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'message and sessionId are required' })
+            };
+        }
+
+        // Get chat history
+        const chatHistory = await getChatHistory(sessionId);
+
+        // Build messages array (user/assistant only — system is separate)
         const messages = [
-            { role: "system", content: systemPrompt },
             ...chatHistory,
             { role: "user", content: message }
         ];
@@ -64,14 +77,14 @@ Your role is to help veterans navigate the FDQ process, understand requirements,
 
 async function callClaude(messages) {
     const params = {
-        modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
+        modelId: 'anthropic.claude-sonnet-4-20250514-v1:0',
         contentType: 'application/json',
         accept: 'application/json',
         body: JSON.stringify({
             anthropic_version: "bedrock-2023-05-31",
-            max_tokens: 1000,
-            messages: messages.filter(m => m.role !== 'system'),
-            system: messages.find(m => m.role === 'system')?.content
+            max_tokens: 1024,
+            system: SYSTEM_PROMPT,
+            messages: messages
         })
     };
 
@@ -83,7 +96,7 @@ async function callClaude(messages) {
 }
 
 async function getChatHistory(sessionId) {
-    const params = {
+    const command = new QueryCommand({
         TableName: process.env.CHAT_HISTORY_TABLE,
         KeyConditionExpression: 'sessionId = :sessionId',
         ExpressionAttributeValues: {
@@ -91,26 +104,27 @@ async function getChatHistory(sessionId) {
         },
         ScanIndexForward: true,
         Limit: 10
-    };
+    });
 
-    const result = await dynamodb.query(params).promise();
-    return result.Items.map(item => [
+    const result = await dynamodb.send(command);
+    return (result.Items || []).map(item => [
         { role: 'user', content: item.userMessage },
         { role: 'assistant', content: item.botResponse }
     ]).flat();
 }
 
 async function saveChatMessage(sessionId, userId, userMessage, botResponse) {
-    const params = {
+    const command = new PutCommand({
         TableName: process.env.CHAT_HISTORY_TABLE,
         Item: {
             sessionId: sessionId,
             timestamp: Date.now(),
-            userId: userId,
+            userId: userId || 'anonymous',
             userMessage: userMessage,
-            botResponse: botResponse
+            botResponse: botResponse,
+            ttl: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 day TTL
         }
-    };
+    });
 
-    await dynamodb.put(params).promise();
+    await dynamodb.send(command);
 }

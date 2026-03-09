@@ -25,7 +25,6 @@ import logging
 import time
 from typing import Any
 
-import httpx
 import jwt
 from jwt import PyJWKClient
 
@@ -69,7 +68,9 @@ def decode_cognito_token(token: str) -> dict[str, Any] | None:
     Validates:
       - Signature (RS256 against Cognito JWKS)
       - Issuer (must match configured User Pool)
-      - Audience (must match configured App Client ID)
+      - Audience: ID tokens carry ``aud = client_id``; access tokens carry
+        ``client_id`` as a top-level claim instead of ``aud``.  We verify
+        each type separately to avoid false rejections.
       - Expiration
       - token_use claim (accepts both 'id' and 'access')
 
@@ -87,22 +88,51 @@ def decode_cognito_token(token: str) -> dict[str, Any] | None:
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
 
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            issuer=expected_issuer,
-            audience=settings.cognito_app_client_id,
-            options={"require": ["exp", "iss", "sub"]},
-        )
+        # Try verifying as an ID token first (aud = app_client_id).
+        # If the token is an access token, Cognito omits the ``aud`` claim so
+        # PyJWT will raise InvalidAudienceError; we then fall back to the
+        # access-token path which checks the ``client_id`` claim instead.
+        try:
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                issuer=expected_issuer,
+                audience=settings.cognito_app_client_id,
+                options={"require": ["exp", "iss", "sub"]},
+            )
+            token_use = payload.get("token_use")
+            if token_use not in ("id", "access"):
+                logger.warning("Invalid token_use claim in ID token: %s", token_use)
+                return None
+            return payload
 
-        # Verify token_use claim
-        token_use = payload.get("token_use")
-        if token_use not in ("id", "access"):
-            logger.warning("Invalid token_use claim: %s", token_use)
-            return None
-
-        return payload
+        except jwt.InvalidAudienceError:
+            # Access tokens don't carry ``aud``; decode without audience check
+            # and verify the ``client_id`` claim manually.
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                issuer=expected_issuer,
+                options={
+                    "require": ["exp", "iss", "sub"],
+                    "verify_aud": False,
+                },
+            )
+            token_use = payload.get("token_use")
+            if token_use != "access":
+                logger.warning(
+                    "Token missing audience but token_use is not 'access': %s", token_use
+                )
+                return None
+            if payload.get("client_id") != settings.cognito_app_client_id:
+                logger.warning(
+                    "Cognito access token client_id mismatch: %s",
+                    payload.get("client_id"),
+                )
+                return None
+            return payload
 
     except jwt.ExpiredSignatureError:
         logger.warning("Cognito token expired")

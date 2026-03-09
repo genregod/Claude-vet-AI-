@@ -135,7 +135,22 @@ export function ClaimForm() {
     }
 
     try {
-      await apiRequest("POST", "/api/claims", formData);
+      await apiRequest("POST", "/evaluate", {
+        service_branch: formData.branch || "Unknown",
+        current_rating: formData.status || "Not yet rated",
+        primary_concerns: [
+          ...(formData.claimTypes.length ? formData.claimTypes : ["General inquiry"]),
+          ...(formData.claimDescription ? [formData.claimDescription] : []),
+        ].join("; "),
+        additional_details: [
+          formData.serviceStart && `Service start: ${formData.serviceStart}`,
+          formData.serviceEnd && `Service end: ${formData.serviceEnd}`,
+          formData.dischargeType && `Discharge type: ${formData.dischargeType}`,
+          formData.previousClaim && `Previous claim: ${formData.previousClaim}`,
+        ]
+          .filter(Boolean)
+          .join(". "),
+      });
 
       toast({
         title: "Claim Submitted",

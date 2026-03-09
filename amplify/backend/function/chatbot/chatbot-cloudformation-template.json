@@ -20,7 +20,7 @@
           "Fn::Sub": "chatbot-${env}"
         },
         "Handler": "index.handler",
-        "Runtime": "nodejs18.x",
+        "Runtime": "nodejs20.x",
         "Timeout": 30,
         "MemorySize": 256,
         "Environment": {

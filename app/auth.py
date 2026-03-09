@@ -44,6 +44,7 @@ class AuthProvider(str, Enum):
     IDME = "id.me"
     OAUTH_GOOGLE = "google"
     OAUTH_GITHUB = "github"
+    COGNITO = "cognito"
 
 
 class VerificationLevel(str, Enum):
@@ -128,6 +129,48 @@ class UserStore:
     def get_user_by_email(self, email: str) -> UserProfile | None:
         uid = self._email_index.get(email.lower())
         return self._users.get(uid) if uid else None
+
+    def upsert_user_with_id(
+        self,
+        user_id: str,
+        email: str,
+        provider: AuthProvider,
+        **kwargs,
+    ) -> UserProfile:
+        """
+        Create or retrieve a user forcing a specific user_id (e.g. Cognito sub).
+        If a user with this id already exists, it is returned unchanged.
+        If a user with the same email exists under a different id, the existing
+        record is re-keyed to the provided id.
+        """
+        # Already exists under the given id
+        existing = self._users.get(user_id)
+        if existing:
+            return existing
+
+        # A legacy record may exist under a different uuid keyed by email
+        if email:
+            old_uid = self._email_index.get(email.lower())
+            if old_uid and old_uid != user_id:
+                old_user = self._users.pop(old_uid, None)
+                if old_user:
+                    old_user.user_id = user_id
+                    self._users[user_id] = old_user
+                    self._email_index[email.lower()] = user_id
+                    logger.info("Re-keyed user %s → %s via %s", old_uid, user_id, provider.value)
+                    return old_user
+
+        user = UserProfile(
+            user_id=user_id,
+            email=email.lower() if email else "",
+            provider=provider,
+            **kwargs,
+        )
+        self._users[user_id] = user
+        if email:
+            self._email_index[email.lower()] = user_id
+        logger.info("Created user %s via %s", user_id, provider.value)
+        return user
 
     def update_user(self, user: UserProfile) -> None:
         self._users[user.user_id] = user

@@ -30,6 +30,11 @@ Thumbs.db
 node_modules/
 frontend/dist/
 
+# Amplify Gen 2 generated
+.amplify/
+amplify_outputs.json
+amplify_outputs.dart
+
 # Uploads (user data, not tracked)
 app/data/uploads/*
 !app/data/uploads/.gitkeep

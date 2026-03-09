@@ -46,7 +46,7 @@ async function request(path, options = {}) {
       if (refreshed) return request(path, options);
     }
     localStorage.clear();
-    window.location.href = '/login';
+    window.location.href = '/';
     throw new Error('Session expired');
   }
 
@@ -133,17 +133,24 @@ export async function logout() {
 
 // ── Chat ────────────────────────────────────────────────────────────
 
+/**
+ * Convert a human-readable quick-action label to the backend enum value
+ * (QuickAction in server.py). Falls back to a snake_case conversion.
+ */
+function toQuickActionEnum(label) {
+  return label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
 export async function createChatSession() {
   return request('/chat/session', { method: 'POST' });
 }
 
-export async function sendMessage(question, sessionId, sourceTypeFilter) {
+export async function sendMessage(message, sessionId) {
   return request('/chat', {
     method: 'POST',
     body: JSON.stringify({
-      question,
+      question: message,
       session_id: sessionId || undefined,
-      source_type_filter: sourceTypeFilter || undefined,
     }),
   });
 }
@@ -151,7 +158,10 @@ export async function sendMessage(question, sessionId, sourceTypeFilter) {
 export async function sendQuickAction(action, sessionId) {
   return request('/chat/quick-action', {
     method: 'POST',
-    body: JSON.stringify({ action, session_id: sessionId || undefined }),
+    body: JSON.stringify({
+      action: toQuickActionEnum(action),
+      session_id: sessionId || undefined,
+    }),
   });
 }
 

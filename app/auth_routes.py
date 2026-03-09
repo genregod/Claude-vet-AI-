@@ -102,24 +102,23 @@ async def get_current_user(request: Request) -> UserProfile:
 
         # Cognito 'sub' is the unique user ID, email from token claims
         cognito_sub = payload["sub"]
-        email = payload.get("email", "")
+        email = payload.get("email", "").strip()
 
-        # Auto-provision or retrieve user from store
-        user = user_store.get_user(cognito_sub)
-        if user is None:
-            user = user_store.create_user(
-                email=email,
-                provider=AuthProvider.OAUTH_GOOGLE,  # mapped as generic OAuth
-                first_name=payload.get("given_name", ""),
-                last_name=payload.get("family_name", ""),
-                verification_level=VerificationLevel.LOA1,
-            )
-            # Override the auto-generated user_id with Cognito sub
-            user_store._users.pop(user.user_id, None)
-            user.user_id = cognito_sub
-            user_store._users[cognito_sub] = user
-            user_store._email_index[email.lower()] = cognito_sub
-            logger.info("Auto-provisioned Cognito user %s (%s)", cognito_sub, email)
+        # Validate email is present and well-formed before provisioning
+        if email and "@" not in email:
+            logger.warning("Cognito token contains malformed email for sub %s", cognito_sub)
+            email = ""
+
+        # Auto-provision or retrieve user from store using the Cognito sub as user_id
+        user = user_store.upsert_user_with_id(
+            user_id=cognito_sub,
+            email=email,
+            provider=AuthProvider.COGNITO,
+            first_name=payload.get("given_name", ""),
+            last_name=payload.get("family_name", ""),
+            verification_level=VerificationLevel.LOA1,
+        )
+        logger.info("Cognito user resolved: %s (%s)", cognito_sub, email or "<no-email>")
     else:
         payload = decode_access_token(token)
         if payload is None:

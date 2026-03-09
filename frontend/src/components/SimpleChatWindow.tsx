@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { MessageCircle, Send, X, User, Bot, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { toQuickActionEnum } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -15,9 +16,10 @@ interface Message {
 }
 
 interface ChatResponse {
-  answer: string;
+  response: string;
+  sessionId?: string;
+  answer?: string;  // fallback field name
   sources?: any[];
-  model?: string;
 }
 
 interface SimpleChatWindowProps {
@@ -49,7 +51,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
   useEffect(() => {
     const createSession = async () => {
       try {
-        const response = await apiRequest("POST", "/chat/session", {});
+        const response = await apiRequest("POST", "/chat/session");
         const data = await response.json();
         setSessionId(data.session_id);
       } catch (error) {
@@ -96,7 +98,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
       setMessage("");
       
       try {
-        // Send message to FastAPI backend
+        // Send message to backend chat endpoint
         const response = await apiRequest("POST", "/chat", {
           question: userMessage.content,
           session_id: sessionId
@@ -109,7 +111,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
             msg.id === loadingMessage.id 
               ? { 
                   ...msg, 
-                  content: chatResponse.answer, 
+                  content: chatResponse.response || chatResponse.answer || "No response received", 
                   isLoading: false,
                   sources: chatResponse.sources 
                 }
@@ -162,7 +164,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
     
     try {
       const response = await apiRequest("POST", "/chat/quick-action", {
-        action: action.toLowerCase().replace(/\s+/g, '_'),
+        action: toQuickActionEnum(action),
         session_id: sessionId
       });
       const chatResponse: ChatResponse = await response.json();
@@ -172,7 +174,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
           msg.id === loadingMessage.id 
             ? { 
                 ...msg, 
-                content: chatResponse.answer, 
+                content: chatResponse.response || chatResponse.answer || "No response received", 
                 isLoading: false,
                 sources: chatResponse.sources 
               }

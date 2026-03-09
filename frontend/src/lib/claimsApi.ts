@@ -9,7 +9,7 @@
  * - Claimable conditions lookup
  */
 
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, buildApiUrl } from "@/lib/queryClient";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -207,15 +207,57 @@ export async function createClaimSession(data: {
   first_name: string;
   last_name: string;
 }): Promise<{ session_id: string; current_page: string; total_pages: number }> {
-  const res = await apiRequest("POST", "/claims/session", data);
+  const res = await apiRequest("POST", "/auth/signup", data);
   const json = await res.json();
-  saveSessionToStorage(json.session_id);
-  return json;
+  // Backend returns session info — store tokens if provided
+  if (json.access_token) {
+    localStorage.setItem("access_token", json.access_token);
+  }
+  if (json.refresh_token) {
+    localStorage.setItem("refresh_token", json.refresh_token);
+  }
+  const sessionId = json.session_id || json.user_id || `session_${Date.now()}`;
+  saveSessionToStorage(sessionId);
+  return { session_id: sessionId, current_page: "personal_info", total_pages: 10, ...json };
 }
 
 export async function getClaimSession(sessionId: string): Promise<ClaimSessionStatus> {
-  const res = await apiRequest("GET", `/claims/session/${sessionId}`);
-  return res.json();
+  // Claims session management is handled locally until backend adds support.
+  // Return a synthetic session status from localStorage.
+  const storedId = getSessionFromStorage();
+  if (!storedId || storedId !== sessionId) {
+    throw new Error("Session not found");
+  }
+  return {
+    session_id: sessionId,
+    status: "active",
+    current_page: "personal_info",
+    current_page_index: 1,
+    completed_pages: [],
+    progress_percent: 0,
+    total_pages: 10,
+    ai_estimates: {
+      estimated_rating_percent: 0,
+      estimated_combined_rating: 0,
+      estimated_monthly_compensation: 0,
+      estimated_backpay: 0,
+      estimated_decision_timeline_days: 0,
+      confidence_level: "pending",
+      individual_ratings: [],
+      notes: [],
+      last_updated: 0,
+    },
+    agent: {
+      claims_agent_id: "",
+      supervisor_id: "",
+      claims_assistant_id: "",
+      current_handler: "",
+      assignment_time: 0,
+      notes: [],
+    },
+    created_at: Date.now(),
+    last_active: Date.now(),
+  };
 }
 
 export async function savePageAnswers(
@@ -223,48 +265,103 @@ export async function savePageAnswers(
   page: string,
   answers: Record<string, unknown>,
 ): Promise<SavePageResponse> {
-  // Save locally first for crash recovery
+  // Save locally for persistence (backend claims session routes pending)
   savePageLocally(page, answers);
-  
-  const res = await apiRequest("POST", `/claims/session/${sessionId}/page`, {
-    page,
-    answers,
-  });
-  return res.json();
+
+  return {
+    session_id: sessionId,
+    page_saved: page,
+    next_page: null,
+    progress_percent: 0,
+    ai_estimates: {
+      estimated_rating_percent: 0,
+      estimated_combined_rating: 0,
+      estimated_monthly_compensation: 0,
+      estimated_backpay: 0,
+      estimated_decision_timeline_days: 0,
+      confidence_level: "pending",
+      individual_ratings: [],
+      notes: [],
+      last_updated: 0,
+    },
+    completed_pages: [],
+  };
 }
 
 export async function getPageAnswers(
-  sessionId: string,
+  _sessionId: string,
   page: string,
 ): Promise<{ answers: Record<string, unknown>; is_completed: boolean }> {
-  const res = await apiRequest("GET", `/claims/session/${sessionId}/page/${page}`);
-  return res.json();
+  // Retrieve from localStorage (backend claims session routes pending)
+  const answers = getPageLocally(page);
+  return {
+    answers: answers || {},
+    is_completed: answers !== null,
+  };
 }
 
-export async function getAIEstimates(sessionId: string): Promise<AIEstimates> {
-  const res = await apiRequest("GET", `/claims/session/${sessionId}/estimates`);
-  return res.json();
+export async function getAIEstimates(_sessionId: string): Promise<AIEstimates> {
+  // AI estimates will come from the backend once the evaluation pipeline is connected.
+  return {
+    estimated_rating_percent: 0,
+    estimated_combined_rating: 0,
+    estimated_monthly_compensation: 0,
+    estimated_backpay: 0,
+    estimated_decision_timeline_days: 0,
+    confidence_level: "pending",
+    individual_ratings: [],
+    notes: ["AI evaluation pending — complete the questionnaire for estimates."],
+    last_updated: Date.now(),
+  };
 }
 
 export async function triggerEvaluation(
-  sessionId: string,
+  _sessionId: string,
 ): Promise<{ estimates: AIEstimates }> {
-  const res = await apiRequest("POST", `/claims/session/${sessionId}/evaluate`);
-  return res.json();
+  // Evaluation pipeline pending backend integration
+  return {
+    estimates: await getAIEstimates(_sessionId),
+  };
 }
 
-export async function submitClaim(sessionId: string): Promise<SubmitClaimResponse> {
-  const res = await apiRequest("POST", `/claims/session/${sessionId}/submit`);
-  return res.json();
+export async function submitClaim(_sessionId: string): Promise<SubmitClaimResponse> {
+  // Gather all locally saved pages for a basic submission
+  return {
+    session_id: _sessionId,
+    status: "submitted",
+    fdc_package: {
+      claim_type: "disability",
+      primary_form: "VA-21-526EZ",
+      conditions_claimed: [],
+      estimated_combined_rating: 0,
+      required_forms: [],
+      evidence_checklist: [],
+      status: "draft",
+      prepared_at: Date.now(),
+    },
+    supervisor_review: {},
+    message: "Your claim information has been saved. Full submission pipeline coming soon.",
+  };
 }
 
 export async function getClaimableConditions(): Promise<ConditionsData> {
-  const res = await apiRequest("GET", "/claims/conditions");
-  return res.json();
+  // Static conditions list until backend endpoint is connected
+  return {
+    categories: {
+      "Mental Health": ["PTSD", "Depression", "Anxiety", "Insomnia", "Adjustment Disorder"],
+      "Musculoskeletal": ["Back Pain", "Knee Condition", "Shoulder Injury", "Neck Pain", "Plantar Fasciitis"],
+      "Hearing": ["Tinnitus", "Hearing Loss"],
+      "Respiratory": ["Asthma", "Sleep Apnea", "Sinusitis"],
+      "Skin": ["Eczema", "Scars", "Skin Cancer"],
+      "Cardiovascular": ["Hypertension", "Heart Disease"],
+      "Neurological": ["Migraines", "TBI", "Radiculopathy"],
+    },
+    all_conditions: [],
+    total_count: 0,
+  };
 }
 
-export async function deleteClaimSession(sessionId: string): Promise<void> {
-  await apiRequest("DELETE", `/claims/session/${sessionId}`);
+export async function deleteClaimSession(_sessionId: string): Promise<void> {
   clearSessionStorage();
   clearAllLocalPages();
 }
@@ -272,14 +369,15 @@ export async function deleteClaimSession(sessionId: string): Promise<void> {
 // ── Records Upload ──────────────────────────────────────────────────
 
 export async function uploadMilitaryRecords(
-  sessionId: string,
+  _sessionId: string,
   file: File,
 ): Promise<UploadRecordsResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("source_type", "General");
 
   // Use fetch directly for multipart/form-data (apiRequest sends JSON)
-  const res = await fetch(`/api/claims/session/${sessionId}/upload`, {
+  const res = await fetch(buildApiUrl("/upload"), {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -290,7 +388,7 @@ export async function uploadMilitaryRecords(
     let detail = `Upload failed (${res.status})`;
     try {
       const errJson = JSON.parse(errorBody);
-      detail = errJson.detail || detail;
+      detail = errJson.detail || errJson.error || detail;
     } catch {
       // use default detail
     }
@@ -301,8 +399,9 @@ export async function uploadMilitaryRecords(
 }
 
 export async function getUploadedFiles(
-  sessionId: string,
+  _sessionId: string,
 ): Promise<{ files: UploadedFile[]; total: number }> {
-  const res = await apiRequest("GET", `/claims/session/${sessionId}/uploads`);
-  return res.json();
+  // The backend does not expose a file-listing endpoint yet.
+  // Return an empty list so callers can render gracefully.
+  return { files: [], total: 0 };
 }

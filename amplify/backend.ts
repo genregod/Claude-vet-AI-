@@ -1,140 +1,46 @@
-import { defineBackend } from "@aws-amplify/backend";
-import { Stack } from "aws-cdk-lib";
-import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
-import * as s3 from "aws-cdk-lib/aws-s3";
-import * as iam from "aws-cdk-lib/aws-iam";
-import { auth } from "./auth/resource";
-import { chatbotFunction } from "./functions/chatbot/resource";
-import { documentProcessorFunction } from "./functions/document-processor/resource";
-
 /**
- * Valor Assist — Amplify Gen 2 Backend
+ * Valor Assist — Amplify Gen 2 Backend Reference Configuration
  *
- * Defines authentication, Lambda functions, and references existing
- * AWS resources (DynamoDB tables, S3 bucket, API Gateway).
+ * This file documents the existing AWS infrastructure. The backend is
+ * deployed independently (Lambda, API Gateway, Cognito, DynamoDB, S3)
+ * and is NOT managed by Amplify Gen 2 pipeline-deploy.
  *
- * Existing backend API:
- *   https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod
+ * Amplify Hosting handles frontend CI/CD only.
+ *
+ * Existing resources:
+ *   API Gateway:  https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod
+ *   Cognito:      us-east-1_2Ec6BMJsE (client: 4u4gtq8o2cnvgaevh0hqc62cu9)
+ *   S3 Bucket:    valor-assist-documents-1773005280
+ *   DynamoDB:     ValorAssist-Users, ValorAssist-ChatSessions,
+ *                 ValorAssist-Documents, ValorAssist-Claims,
+ *                 ValorAssist-VectorStore
+ *   Lambdas:      valor-assist-chat, valor-assist-auth, valor-assist-documents
  */
-const backend = defineBackend({
-  auth,
-  chatbotFunction,
-  documentProcessorFunction,
-});
 
-// ---------------------------------------------------------------------------
-// Custom resource stack — references existing AWS infrastructure
-// ---------------------------------------------------------------------------
-const existingResourcesStack = backend.createStack("ExistingResources");
-const region = Stack.of(existingResourcesStack).region;
-const accountId = Stack.of(existingResourcesStack).account;
-
-// --- Existing DynamoDB Tables ---
-const chatSessionsTable = dynamodb.Table.fromTableAttributes(
-  existingResourcesStack,
-  "ChatSessionsTable",
-  {
-    tableName: "ValorAssist-ChatSessions",
-    globalIndexes: ["userId-index"],
-  }
-);
-
-const usersTable = dynamodb.Table.fromTableAttributes(
-  existingResourcesStack,
-  "UsersTable",
-  {
-    tableName: "ValorAssist-Users",
-  }
-);
-
-const documentsTable = dynamodb.Table.fromTableAttributes(
-  existingResourcesStack,
-  "DocumentsTable",
-  {
-    tableName: "ValorAssist-Documents",
-  }
-);
-
-const claimsTable = dynamodb.Table.fromTableAttributes(
-  existingResourcesStack,
-  "ClaimsTable",
-  {
-    tableName: "ValorAssist-Claims",
-  }
-);
-
-const vectorStoreTable = dynamodb.Table.fromTableAttributes(
-  existingResourcesStack,
-  "VectorStoreTable",
-  {
-    tableName: "ValorAssist-VectorStore",
-  }
-);
-
-// --- Existing S3 Bucket ---
-const docsBucket = s3.Bucket.fromBucketName(
-  existingResourcesStack,
-  "DocsBucket",
-  "valor-assist-docs"
-);
-
-// ---------------------------------------------------------------------------
-// IAM permissions for Lambda functions
-// ---------------------------------------------------------------------------
-
-// Chatbot Lambda — DynamoDB + Bedrock
-chatSessionsTable.grantReadWriteData(
-  backend.chatbotFunction.resources.lambda
-);
-backend.chatbotFunction.resources.lambda.addToRolePolicy(
-  new iam.PolicyStatement({
-    actions: ["bedrock:InvokeModel"],
-    resources: [
-      `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0`,
-    ],
-  })
-);
-
-// Document Processor Lambda — DynamoDB + S3 + Textract + Bedrock
-documentsTable.grantReadWriteData(
-  backend.documentProcessorFunction.resources.lambda
-);
-docsBucket.grantReadWrite(
-  backend.documentProcessorFunction.resources.lambda
-);
-backend.documentProcessorFunction.resources.lambda.addToRolePolicy(
-  new iam.PolicyStatement({
-    actions: [
-      "textract:DetectDocumentText",
-      "textract:AnalyzeDocument",
-      "bedrock:InvokeModel",
-    ],
-    resources: ["*"],
-  })
-);
-
-// ---------------------------------------------------------------------------
-// Outputs — surface existing resource info to frontend via amplify_outputs.json
-// ---------------------------------------------------------------------------
-backend.addOutput({
-  custom: {
-    API: {
-      ValorAssistAPI: {
-        endpoint:
-          "https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod",
-        region: "us-east-1",
-        apiName: "ValorAssistAPI",
-      },
-    },
-    DynamoDB: {
-      ChatSessions: "ValorAssist-ChatSessions",
-      Users: "ValorAssist-Users",
-      Documents: "ValorAssist-Documents",
-      Claims: "ValorAssist-Claims",
-      VectorStore: "ValorAssist-VectorStore",
-    },
-    S3: {
-      DocsBucket: "valor-assist-docs",
-    },
+export const existingResources = {
+  api: {
+    endpoint: "https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod",
+    id: "rsf5bpx04c",
+    region: "us-east-1",
   },
-});
+  cognito: {
+    userPoolId: "us-east-1_2Ec6BMJsE",
+    userPoolClientId: "4u4gtq8o2cnvgaevh0hqc62cu9",
+    identityPoolId: "us-east-1:e787e729-fced-4892-8d7b-a5fe72f53cbd",
+  },
+  s3: {
+    documentsBucket: "valor-assist-documents-1773005280",
+  },
+  dynamodb: {
+    users: "ValorAssist-Users",
+    chatSessions: "ValorAssist-ChatSessions",
+    documents: "ValorAssist-Documents",
+    claims: "ValorAssist-Claims",
+    vectorStore: "ValorAssist-VectorStore",
+  },
+  lambda: {
+    chat: "valor-assist-chat",
+    auth: "valor-assist-auth",
+    documents: "valor-assist-documents",
+  },
+};

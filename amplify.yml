@@ -1,11 +1,4 @@
 version: 1
-backend:
-  phases:
-    build:
-      commands:
-        - '# Amplify Gen 2 backend build'
-        - npm ci --prefix amplify
-        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
     preBuild:
@@ -13,11 +6,33 @@ frontend:
         - nvm install 20
         - nvm use 20
         - node -v
-        - npm ci --prefix frontend
+        - cd frontend && npm ci
+        # Generate API config from Amplify environment variables
+        - mkdir -p src/config
+        - |
+          cat > src/config/api.js << 'EOL'
+          export const API_CONFIG = {
+            baseURL: '${VITE_API_URL:-https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod}',
+            region: '${VITE_AWS_REGION:-us-east-1}',
+            endpoints: {
+              chat: '/api/chat/chat',
+              onboarding: '/api/chat/onboarding-chat',
+              quickAction: '/api/chat/quick-action',
+              evaluate: '/api/chat/evaluate',
+              signup: '/api/auth/signup',
+              login: '/api/auth/login',
+              verifyEmail: '/api/auth/verify-email',
+              completeOnboarding: '/api/auth/complete-onboarding',
+              uploadDoc: '/api/documents/upload',
+              processDoc: '/api/documents/process',
+              listDocs: '/api/documents/list',
+              extractDoc: '/api/documents/extract'
+            }
+          };
+          EOL
     build:
       commands:
-        - echo "VITE_API_URL=$VITE_API_URL"
-        - VITE_API_URL=${VITE_API_URL:-""} npm run build --prefix frontend
+        - cd frontend && VITE_API_URL=${VITE_API_URL:-"https://rsf5bpx04c.execute-api.us-east-1.amazonaws.com/prod"} npm run build
   artifacts:
     baseDirectory: frontend/dist
     files:
@@ -25,7 +40,6 @@ frontend:
   cache:
     paths:
       - frontend/node_modules/**/*
-      - amplify/node_modules/**/*
   customHeaders:
     - pattern: '**/*'
       headers:

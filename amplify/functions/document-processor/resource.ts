@@ -12,8 +12,8 @@ export const documentProcessorFunction = defineFunction({
   timeoutSeconds: 120,
   memoryMB: 1024,
   environment: {
-    DOCUMENTS_TABLE_NAME: "ValorAssist-Documents",
-    S3_BUCKET_NAME: "valor-assist-docs",
+    DOCUMENTS_TABLE: "ValorAssist-Documents",
+    STORAGE_BUCKET: "valor-assist-docs",
     BEDROCK_MODEL_ID: "anthropic.claude-sonnet-4-20250514-v1:0",
   },
 });

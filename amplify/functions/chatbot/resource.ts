@@ -11,7 +11,7 @@ export const chatbotFunction = defineFunction({
   timeoutSeconds: 30,
   memoryMB: 512,
   environment: {
-    CHAT_TABLE_NAME: "ValorAssist-ChatSessions",
+    CHAT_HISTORY_TABLE: "ValorAssist-ChatSessions",
     BEDROCK_MODEL_ID: "anthropic.claude-sonnet-4-20250514-v1:0",
   },
 });

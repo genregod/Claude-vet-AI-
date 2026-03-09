@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { MessageCircle, Send, X, User, Bot, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { toQuickActionEnum } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -50,9 +51,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
   useEffect(() => {
     const createSession = async () => {
       try {
-        const response = await apiRequest("POST", "/chat/onboarding-chat", {
-          message: "start_session"
-        });
+        const response = await apiRequest("POST", "/chat/session");
         const data = await response.json();
         setSessionId(data.session_id);
       } catch (error) {
@@ -100,9 +99,9 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
       
       try {
         // Send message to backend chat endpoint
-        const response = await apiRequest("POST", "/chat/chat", {
-          message: userMessage.content,
-          sessionId: sessionId
+        const response = await apiRequest("POST", "/chat", {
+          question: userMessage.content,
+          session_id: sessionId
         });
         const chatResponse: ChatResponse = await response.json();
         
@@ -164,9 +163,9 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
     setMessage("");
     
     try {
-      const response = await apiRequest("POST", "/chat/onboarding-chat", {
-        message: action,
-        sessionId: sessionId
+      const response = await apiRequest("POST", "/chat/quick-action", {
+        action: toQuickActionEnum(action),
+        session_id: sessionId
       });
       const chatResponse: ChatResponse = await response.json();
       

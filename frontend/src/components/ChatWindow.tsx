@@ -38,9 +38,7 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
     if (isOpen && !sessionId) {
       const createSession = async () => {
         try {
-          const res = await apiRequest("POST", "/chat/onboarding-chat", {
-            message: "start_session",
-          });
+          const res = await apiRequest("POST", "/chat/session");
           const data = await res.json();
           setSessionId(data.session_id || `session_${Date.now()}`);
         } catch {
@@ -82,9 +80,9 @@ export function ChatWindow({ isOpen, onClose }: ChatWindowProps) {
     setMessage("");
 
     try {
-      const res = await apiRequest("POST", "/chat/chat", {
-        message: userMsg.content,
-        sessionId,
+      const res = await apiRequest("POST", "/chat", {
+        question: userMsg.content,
+        session_id: sessionId,
       });
       const data = await res.json();
       setMessages((prev) =>

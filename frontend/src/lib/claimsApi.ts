@@ -216,7 +216,7 @@ export async function createClaimSession(data: {
   if (json.refresh_token) {
     localStorage.setItem("refresh_token", json.refresh_token);
   }
-  const sessionId = json.session_id || json.userId || `session_${Date.now()}`;
+  const sessionId = json.session_id || json.user_id || `session_${Date.now()}`;
   saveSessionToStorage(sessionId);
   return { session_id: sessionId, current_page: "personal_info", total_pages: 10, ...json };
 }
@@ -369,15 +369,15 @@ export async function deleteClaimSession(_sessionId: string): Promise<void> {
 // ── Records Upload ──────────────────────────────────────────────────
 
 export async function uploadMilitaryRecords(
-  sessionId: string,
+  _sessionId: string,
   file: File,
 ): Promise<UploadRecordsResponse> {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("sessionId", sessionId);
+  formData.append("source_type", "General");
 
   // Use fetch directly for multipart/form-data (apiRequest sends JSON)
-  const res = await fetch(buildApiUrl("/documents/upload"), {
+  const res = await fetch(buildApiUrl("/upload"), {
     method: "POST",
     body: formData,
     credentials: "include",
@@ -399,8 +399,9 @@ export async function uploadMilitaryRecords(
 }
 
 export async function getUploadedFiles(
-  sessionId: string,
+  _sessionId: string,
 ): Promise<{ files: UploadedFile[]; total: number }> {
-  const res = await apiRequest("POST", "/documents/list", { sessionId });
-  return res.json();
+  // The backend does not expose a file-listing endpoint yet.
+  // Return an empty list so callers can render gracefully.
+  return { files: [], total: 0 };
 }

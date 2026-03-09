@@ -3,9 +3,9 @@ backend:
   phases:
     build:
       commands:
-        - '# Install Lambda function dependencies'
-        - cd amplify/backend/function/chatbot/src && npm ci
-        - cd amplify/backend/function/documentProcessor/src && npm ci
+        - '# Amplify Gen 2 backend build'
+        - npm ci --prefix amplify
+        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
   phases:
     preBuild:
@@ -25,8 +25,7 @@ frontend:
   cache:
     paths:
       - frontend/node_modules/**/*
-      - amplify/backend/function/chatbot/src/node_modules/**/*
-      - amplify/backend/function/documentProcessor/src/node_modules/**/*
+      - amplify/node_modules/**/*
   customHeaders:
     - pattern: '**/*'
       headers:

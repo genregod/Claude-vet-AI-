@@ -4,6 +4,8 @@ import { getCurrentUser } from "aws-amplify/auth";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
+const ERROR_REDIRECT_DELAY_MS = 3000;
+
 export function OAuthCallback() {
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export function OAuthCallback() {
         // Redirect to signup with error indicator after a short delay
         setTimeout(() => {
           setLocation("/signup?error=oauth_failed");
-        }, 3000);
+        }, ERROR_REDIRECT_DELAY_MS);
       }
     };
 

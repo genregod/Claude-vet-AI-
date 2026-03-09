@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { signInWithRedirect } from "aws-amplify/auth";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -7,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Shield } from "lucide-react";
 
 export function SignUpPage() {
-  const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,10 +84,10 @@ export function SignUpPage() {
               <p className="text-sm text-gray-500">
                 Already have an account?{" "}
                 <button
-                  onClick={() => setLocation("/signup")}
+                  onClick={handleGitHubSignUp}
                   className="text-navy font-medium hover:underline"
                 >
-                  Sign in
+                  Sign in with GitHub
                 </button>
               </p>
             </div>

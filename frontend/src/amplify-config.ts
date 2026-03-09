@@ -29,10 +29,12 @@ const amplifyConfig: ResourcesConfig = {
           scopes: ['openid', 'email', 'profile'],
           redirectSignIn: [
             'http://localhost:3000/',
+            // TODO: Replace with your actual production domain
             'https://your-production-domain.com/',
           ],
           redirectSignOut: [
             'http://localhost:3000/',
+            // TODO: Replace with your actual production domain
             'https://your-production-domain.com/',
           ],
           responseType: 'code',

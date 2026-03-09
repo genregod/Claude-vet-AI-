@@ -17,6 +17,7 @@ import {
   signUp,
   signIn,
   signOut,
+  signInWithRedirect,
   confirmSignUp,
   resetPassword,
   confirmResetPassword,
@@ -119,6 +120,14 @@ export async function getCognitoUser(): Promise<CognitoUser | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Sign in (or sign up) via GitHub OAuth using Cognito hosted UI.
+ * Redirects the user to GitHub for authorization.
+ */
+export async function signInWithGitHub(): Promise<void> {
+  await signInWithRedirect({ provider: { custom: 'GitHub' } });
 }
 
 /**

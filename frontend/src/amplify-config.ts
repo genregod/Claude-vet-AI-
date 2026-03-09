@@ -11,6 +11,7 @@
  *   VITE_COGNITO_USER_POOL_ID
  *   VITE_COGNITO_USER_POOL_CLIENT_ID
  *   VITE_COGNITO_IDENTITY_POOL_ID
+ *   VITE_COGNITO_DOMAIN              (Cognito hosted UI domain for OAuth)
  */
 
 import { type ResourcesConfig } from 'aws-amplify';
@@ -23,6 +24,22 @@ const amplifyConfig: ResourcesConfig = {
       identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID || '',
       loginWith: {
         email: true,
+        oauth: {
+          domain: import.meta.env.VITE_COGNITO_DOMAIN || '',
+          scopes: ['openid', 'email', 'profile'],
+          redirectSignIn: [
+            'http://localhost:3000/',
+            // TODO: Replace with your actual production domain
+            'https://your-production-domain.com/',
+          ],
+          redirectSignOut: [
+            'http://localhost:3000/',
+            // TODO: Replace with your actual production domain
+            'https://your-production-domain.com/',
+          ],
+          responseType: 'code',
+          providers: [{ custom: 'GitHub' }],
+        },
       },
       signUpVerificationMethod: 'code',
       userAttributes: {

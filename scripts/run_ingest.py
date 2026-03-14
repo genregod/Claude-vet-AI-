@@ -47,6 +47,7 @@ def os_client() -> OpenSearch:
         use_ssl=True,
         verify_certs=True,
         connection_class=RequestsHttpConnection,
+        timeout=60,
     )
 
 
@@ -104,13 +105,20 @@ def main():
                 "wordCount":  chunk.metadata.get("word_count", 0),
             })
 
-    # Bulk write to OpenSearch
-    logger.info("Writing %d vectors to OpenSearch …", len(os_docs))
-    success, errors = bulk(os_cli, os_docs, raise_on_error=False)
-    logger.info("OpenSearch: %d indexed, %d errors", success, len(errors))
-    if errors:
-        for e in errors[:5]:
-            logger.warning("  OS error: %s", e)
+    # Bulk write to OpenSearch in smaller batches to avoid AOSS timeout
+    OS_BULK = 100
+    logger.info("Writing %d vectors to OpenSearch (batches of %d) …", len(os_docs), OS_BULK)
+    total_ok, total_err = 0, 0
+    for i in range(0, len(os_docs), OS_BULK):
+        batch = os_docs[i : i + OS_BULK]
+        ok, errs = bulk(os_cli, batch, raise_on_error=False)
+        total_ok += ok
+        total_err += len(errs)
+        if errs:
+            logger.warning("  Batch %d–%d: %d errors", i, i + len(batch), len(errs))
+        else:
+            logger.info("  Batch %d–%d: %d indexed", i, i + len(batch), ok)
+    logger.info("OpenSearch: %d indexed, %d errors", total_ok, total_err)
 
     # Batch write to DynamoDB (25 items per batch_write_item call)
     logger.info("Writing %d items to DynamoDB …", len(dynamo_items))

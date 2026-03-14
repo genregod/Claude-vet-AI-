@@ -23,6 +23,13 @@ const amplifyConfig: ResourcesConfig = {
       identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID || '',
       loginWith: {
         email: true,
+        oauth: {
+          domain: 'valor-assist.auth.us-east-1.amazoncognito.com',
+          scopes: ['openid', 'email', 'profile'],
+          redirectSignIn: ['https://main.dnfalf4ttkc7b.amplifyapp.com/callback'],
+          redirectSignOut: ['https://main.dnfalf4ttkc7b.amplifyapp.com/'],
+          responseType: 'code',
+        },
       },
       signUpVerificationMethod: 'code',
       userAttributes: {

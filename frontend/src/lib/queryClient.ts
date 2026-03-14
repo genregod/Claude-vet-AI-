@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
 
@@ -9,18 +10,28 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+async function getToken(): Promise<string | null> {
+  try {
+    const session = await fetchAuthSession();
+    return session.tokens?.idToken?.toString() ?? null;
+  } catch {
+    return localStorage.getItem("access_token");
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  // Prepend /api so requests route through the Vite proxy (dev)
-  // and use VITE_API_URL in production deployments when provided.
   const apiPath = url.startsWith("/api") ? url : `/api${url}`;
   const apiUrl = API_BASE ? `${API_BASE}${apiPath}` : apiPath;
+  const token = await getToken();
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(apiUrl, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });

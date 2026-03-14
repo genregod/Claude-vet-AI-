@@ -96,9 +96,9 @@ def decode_cognito_token(token: str) -> dict[str, Any] | None:
             options={"require": ["exp", "iss", "sub"]},
         )
 
-        # Verify token_use claim
+        # Verify token_use claim — federated Cognito tokens may omit it; treat as valid if absent
         token_use = payload.get("token_use")
-        if token_use not in ("id", "access"):
+        if token_use is not None and token_use not in ("id", "access"):
             logger.warning("Invalid token_use claim: %s", token_use)
             return None
 

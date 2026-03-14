@@ -7,6 +7,7 @@ import { HomePage } from "@/pages/HomePage.tsx";
 import { ChatPage } from "@/pages/ChatPage.tsx";
 import { EvaluatePage } from "@/pages/EvaluatePage.tsx";
 import { StartClaimPage } from "@/pages/StartClaimPage.tsx";
+import { DBQPage } from "@/pages/DBQPage.tsx";
 import { HealthCheckPage } from "@/pages/HealthCheck.tsx";
 import { NotFoundPage } from "@/pages/NotFound.tsx";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
@@ -43,6 +44,7 @@ function App() {
               <Route path="/chat" component={ChatPage} />
               <Route path="/evaluate" component={EvaluatePage} />
               <Route path="/start-claim" component={StartClaimPage} />
+              <Route path="/dbq" component={DBQPage} />
               <Route path="/health" component={HealthCheckPage} />
               <Route component={NotFoundPage} />
             </Switch>

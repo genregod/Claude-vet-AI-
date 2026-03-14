@@ -57,6 +57,7 @@ from app.middleware import configure_security
 from app.pii_shield import install_log_scrubber
 from app.prompts import QUICK_ACTION_QUERIES
 from app.rag_chain import RAGChain
+from app.dbq_routes import router as dbq_router
 from app.sessions import SessionStore
 from app.vector_store import VectorStore
 
@@ -111,6 +112,9 @@ app.include_router(auth_router)
 
 # Mount claims questionnaire routes
 app.include_router(claims_router)
+
+# Mount DBQ assessment routes
+app.include_router(dbq_router)
 
 
 # ── /api prefix support ─────────────────────────────────────────────

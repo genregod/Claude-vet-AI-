@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     enable_hsts: bool = False            # enable in production behind HTTPS
     max_upload_size_mb: int = 10
 
+    # ── AWS / OpenSearch Serverless ─────────────────────────────────
+    aws_region: str = "us-east-1"
+    opensearch_endpoint: str = ""
+    opensearch_index: str = "document-embeddings"
+
     # ── Server ───────────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8000

@@ -58,6 +58,9 @@ from app.pii_shield import install_log_scrubber
 from app.prompts import QUICK_ACTION_QUERIES
 from app.rag_chain import RAGChain
 from app.dbq_routes import router as dbq_router
+from app.claim_store import DynamoSessionStore, ClaimProfileStore
+from app.claim_intake import extract_claim_data, get_next_intake_question
+from app.cognito_auth import decode_cognito_token, is_cognito_token
 from app.sessions import SessionStore
 from app.vector_store import VectorStore
 
@@ -72,20 +75,23 @@ logger = logging.getLogger(__name__)
 
 rag_chain: RAGChain | None = None
 session_store: SessionStore | None = None
+dynamo_sessions: DynamoSessionStore | None = None
+claim_profiles: ClaimProfileStore | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize all subsystems at startup."""
-    global rag_chain, session_store
+    global rag_chain, session_store, dynamo_sessions, claim_profiles
     logger.info("Starting Valor Assist backend …")
 
-    # Install PII log scrubber FIRST — protects all subsequent log output
     install_log_scrubber()
 
     store = VectorStore()
     rag_chain = RAGChain(vector_store=store)
     session_store = SessionStore()
+    dynamo_sessions = DynamoSessionStore()
+    claim_profiles = ClaimProfileStore()
     init_auth_dependencies()
     init_claims(vector_store=store)
 
@@ -253,20 +259,32 @@ def _require_initialized():
         raise HTTPException(status_code=503, detail="Service not yet initialized.")
 
 
+def _get_user_id(request) -> str | None:
+    """Extract Cognito sub from Bearer token, or None for anonymous."""
+    auth = request.headers.get("Authorization", "")
+    token = auth.removeprefix("Bearer ").strip()
+    if token and is_cognito_token(token):
+        payload = decode_cognito_token(token)
+        if payload:
+            return payload.get("sub")
+    return None
+
+
 # ── Session endpoints ────────────────────────────────────────────────
 
 @app.post("/chat/session", response_model=SessionResponse)
-async def create_session():
+async def create_session(request: Request):
     """
-    Create a new chat session. Returns a session_id that the frontend
-    should include in subsequent /chat requests for conversation continuity.
+    Create a new chat session. Authenticated users get a DynamoDB-backed
+    session (persistent across cold starts). Anonymous users get in-memory.
     """
     _require_initialized()
+    user_id = _get_user_id(request)
+    if user_id:
+        sess = dynamo_sessions.create_session(user_id)
+        return SessionResponse(session_id=sess["session_id"], message="Session created.")
     session = session_store.create_session()
-    return SessionResponse(
-        session_id=session.session_id,
-        message="Session created. Include this session_id in /chat requests.",
-    )
+    return SessionResponse(session_id=session.session_id, message="Session created.")
 
 
 @app.delete("/chat/session/{session_id}", response_model=SessionResponse)
@@ -276,35 +294,34 @@ async def delete_session(session_id: str):
     deleted = session_store.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found.")
-    return SessionResponse(
-        session_id=session_id,
-        message="Session ended and history cleared.",
-    )
+    return SessionResponse(session_id=session_id, message="Session ended and history cleared.")
 
 
 # ── Chat endpoint (multi-turn) ──────────────────────────────────────
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     """
-    Primary Q&A endpoint for the chat widget.
-
-    If a session_id is provided, conversation history is maintained
-    across turns. The system retrieves fresh legal context for each
-    question and passes it alongside the conversation history to Claude.
+    Primary Q&A endpoint. Authenticated users get:
+      - DynamoDB-persisted conversation history (survives cold starts)
+      - Automatic claim data extraction after each turn
+      - Guided intake questions injected when claim fields are missing
+    Anonymous users get in-memory session only.
     """
     _require_initialized()
 
-    # Resolve session (optional — works without one too)
+    user_id = _get_user_id(http_request)
+    conversation_history: list[dict] | None = None
     session = None
-    conversation_history = None
-    if request.session_id:
+
+    if user_id and request.session_id:
+        # Authenticated — load from DynamoDB
+        conversation_history = dynamo_sessions.get_history(user_id, request.session_id)
+    elif request.session_id:
+        # Anonymous — load from in-memory store
         session = session_store.get_session(request.session_id)
         if session is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Session expired or not found. Create a new session.",
-            )
+            raise HTTPException(status_code=404, detail="Session expired or not found.")
         conversation_history = session.get_history_for_prompt()
 
     try:
@@ -318,7 +335,43 @@ async def chat(request: ChatRequest):
         logger.exception("Error processing chat request")
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # Persist turns in session
+    answer = result.answer
+
+    # ── Authenticated: persist + extract claim data ──────────────
+    if user_id and request.session_id:
+        dynamo_sessions.append_messages(user_id, request.session_id, request.question, answer)
+
+        # Build full history for extraction (include this turn)
+        full_history = (conversation_history or []) + [
+            {"role": "user", "content": request.question},
+            {"role": "assistant", "content": answer},
+        ]
+
+        # Run claim extraction asynchronously (best-effort — don't fail the request)
+        try:
+            extracted = extract_claim_data(full_history)
+            if extracted:
+                claim_profiles.upsert(user_id, extracted)
+                # If intake is incomplete, append a guided follow-up question
+                next_q = get_next_intake_question(extracted)
+                if next_q and len(answer) < 450:
+                    answer = f"{answer}\n\n{next_q}"
+        except Exception as e:
+            logger.warning("Claim extraction/upsert failed (non-fatal): %s", e)
+
+    elif session:
+        session.add_message("user", request.question)
+        session.add_message("assistant", answer)
+
+    return ChatResponse(
+        answer=answer,
+        sources=[SourceInfo(**s) for s in result.sources],
+        session_id=request.session_id,
+        model=result.model,
+        usage=result.usage,
+    )
+
+    # Persist turns in session — handled inside chat() above
     if session:
         session.add_message("user", request.question)
         session.add_message("assistant", result.answer)

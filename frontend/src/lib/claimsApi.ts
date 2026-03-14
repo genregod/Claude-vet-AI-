@@ -278,11 +278,12 @@ export async function uploadMilitaryRecords(
   const formData = new FormData();
   formData.append("file", file);
 
-  // Use fetch directly for multipart/form-data (apiRequest sends JSON)
-  const res = await fetch(`/api/claims/session/${sessionId}/upload`, {
+  const API_BASE = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+  const url = `${API_BASE}/api/claims/session/${sessionId}/upload`;
+
+  const res = await fetch(url, {
     method: "POST",
     body: formData,
-    credentials: "include",
   });
 
   if (!res.ok) {

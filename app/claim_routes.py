@@ -18,6 +18,7 @@ Endpoints for the multi-page claim questionnaire flow:
 from __future__ import annotations
 
 import logging
+import boto3
 import uuid
 from pathlib import Path
 from typing import Any
@@ -340,6 +341,91 @@ async def get_claimable_conditions():
         all_conditions=ALL_CLAIMABLE_CONDITIONS,
         total_count=len(ALL_CLAIMABLE_CONDITIONS),
     )
+
+
+# ── S3 Presigned Upload ──────────────────────────────────────────────
+
+@router.post("/session/{session_id}/upload-url")
+async def get_upload_url(session_id: str, filename: str, content_type: str = "application/octet-stream"):
+    """Return a presigned S3 PUT URL for direct large-file upload (up to 1GB)."""
+    session = _claim_store.get_session(session_id) if _claim_store else None
+    if not session:
+        raise HTTPException(status_code=404, detail="Claim session not found.")
+
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_RECORD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'.")
+
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    key = f"uploads/{session_id}/{uuid.uuid4().hex[:8]}_{filename}"
+    url = s3.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.s3_bucket, "Key": key, "ContentType": content_type},
+        ExpiresIn=3600,
+    )
+    return {"upload_url": url, "s3_key": key, "expires_in": 3600}
+
+
+@router.post("/session/{session_id}/process-upload")
+async def process_s3_upload(session_id: str, s3_key: str, filename: str):
+    """After S3 upload completes, trigger Claude extraction on the uploaded file."""
+    _require_claims()
+    if _extractor is None:
+        raise HTTPException(status_code=503, detail="Records extractor not available.")
+
+    session = _claim_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Claim session not found.")
+
+    # Download from S3 to /tmp for processing
+    s3 = boto3.client("s3", region_name=settings.aws_region)
+    tmp_path = Path(f"/tmp/{uuid.uuid4().hex[:8]}_{Path(filename).name}")
+    try:
+        s3.download_file(settings.s3_bucket, s3_key, str(tmp_path))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not retrieve uploaded file: {e}")
+
+    try:
+        extraction_result = _extractor.extract_from_file(tmp_path)
+        auto_fill_pages = map_extracted_to_questionnaire(extraction_result)
+
+        session.add_uploaded_file({
+            "filename": filename,
+            "s3_key": s3_key,
+            "size_bytes": tmp_path.stat().st_size,
+            "document_type": extraction_result.get("document_type", "unknown"),
+            "confidence": extraction_result.get("confidence", "low"),
+            "pages_affected": list(auto_fill_pages.keys()),
+        })
+
+        merged_pages = []
+        for page_name, extracted_answers in auto_fill_pages.items():
+            try:
+                page_enum = ClaimPage(page_name)
+            except ValueError:
+                continue
+            existing = session.get_page_answers(page_enum)
+            session.save_page(page_enum, {**extracted_answers, **existing})
+            merged_pages.append(page_name)
+
+        try:
+            estimates = _evaluator.evaluate_claim(session)
+            session.ai_estimates = estimates
+        except Exception as exc:
+            logger.warning("AI evaluation after upload failed: %s", exc)
+
+        return {
+            "session_id": session_id,
+            "filename": filename,
+            "document_type": extraction_result.get("document_type", "unknown"),
+            "document_description": extraction_result.get("document_description", ""),
+            "confidence": extraction_result.get("confidence", "low"),
+            "auto_fill_pages": auto_fill_pages,
+            "pages_affected": merged_pages,
+            "ai_estimates": session.ai_estimates,
+        }
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 # ── Military Records Upload & Auto-Fill ──────────────────────────────

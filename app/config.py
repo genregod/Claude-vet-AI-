@@ -101,6 +101,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     opensearch_endpoint: str = ""
     opensearch_index: str = "document-embeddings"
+    s3_bucket: str = "valor-assist-documents-1773005280"
 
     # ── Server ───────────────────────────────────────────────────────
     host: str = "0.0.0.0"

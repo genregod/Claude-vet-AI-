@@ -86,7 +86,12 @@ class Settings(BaseSettings):
     va_api_sandbox: bool = True          # False for production
 
     # ── Security / CORS ──────────────────────────────────────────────
-    allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://main.dnfalf4ttkc7b.amplifyapp.com",
+        "https://dnfalf4ttkc7b.amplifyapp.com",
+    ]
     rate_limit_max_requests: int = 30    # per window per IP
     rate_limit_window_seconds: int = 60
     enable_hsts: bool = False            # enable in production behind HTTPS

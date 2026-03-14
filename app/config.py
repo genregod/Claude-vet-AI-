@@ -8,6 +8,7 @@ variables or a .env file.
 """
 
 from pathlib import Path
+import os
 
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings
@@ -17,9 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RAW_DOCS_DIR = DATA_DIR / "raw"
 CHROMA_DIR = DATA_DIR / "chroma_db"
-UPLOADS_DIR = DATA_DIR / "uploads"
-
-# Ensure upload directory exists
+# Lambda /var/task is read-only — use /tmp for writable paths
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "/tmp/uploads"))
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 

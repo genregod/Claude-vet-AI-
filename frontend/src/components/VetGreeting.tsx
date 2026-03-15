@@ -14,7 +14,7 @@ interface Props {
   sessionId?: string;
 }
 
-export function VetGreeting({ veteranName, extractedData, sessionId }: Props) {
+export function VetGreeting({ veteranName, extractedData, sessionId: _sessionId }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);

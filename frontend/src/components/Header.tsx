@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { fetchAuthSession, signOut, getCurrentUser } from "aws-amplify/auth";
+import { signOut, getCurrentUser } from "aws-amplify/auth";
 import { Button } from "@/components/ui/button";
 import { Shield, LogOut, LogIn, FileText, Heart, MessageCircle, Home } from "lucide-react";
 

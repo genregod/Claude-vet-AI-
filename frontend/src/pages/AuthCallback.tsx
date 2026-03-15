@@ -1,20 +1,36 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { getCurrentUser } from "aws-amplify/auth";
+import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
 import { Loader2 } from "lucide-react";
 
-/**
- * Handles the OAuth redirect from Cognito (GitHub, future ID.me, etc.).
- * Amplify automatically exchanges the ?code= param for tokens on mount.
- * We just wait for getCurrentUser() to resolve, then navigate.
- */
+const ONBOARDING_KEY = (uid: string) => `va_ob_${uid}`;
+
 export function AuthCallback() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    getCurrentUser()
-      .then(() => setLocation("/dashboard"))
-      .catch(() => setLocation("/login"));
+    (async () => {
+      try {
+        const user = await getCurrentUser();
+        // Check localStorage first (fast path)
+        if (localStorage.getItem(ONBOARDING_KEY(user.userId))) {
+          setLocation("/dashboard");
+          return;
+        }
+        // Fallback: check if name attribute is already a real name (cross-device)
+        const attrs = await fetchUserAttributes();
+        const name = attrs.name ?? "";
+        const isOnboarded = name.length > 0 && !name.startsWith("GitHub_");
+        if (isOnboarded) {
+          localStorage.setItem(ONBOARDING_KEY(user.userId), "1");
+          setLocation("/dashboard");
+        } else {
+          setLocation("/onboarding");
+        }
+      } catch {
+        setLocation("/login");
+      }
+    })();
   }, []);
 
   return (

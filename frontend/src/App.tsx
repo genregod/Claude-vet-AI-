@@ -12,6 +12,7 @@ import { SecureDashboard } from "@/pages/SecureDashboard.tsx";
 import { HealthCheckPage } from "@/pages/HealthCheck.tsx";
 import { LoginPage } from "@/pages/LoginPage.tsx";
 import { AuthCallback } from "@/pages/AuthCallback.tsx";
+import { OnboardingPage } from "@/pages/OnboardingPage.tsx";
 import { NotFoundPage } from "@/pages/NotFound.tsx";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 
@@ -52,6 +53,7 @@ function App() {
               <Route path="/health" component={HealthCheckPage} />
               <Route path="/login" component={LoginPage} />
               <Route path="/callback" component={AuthCallback} />
+              <Route path="/onboarding" component={OnboardingPage} />
               <Route component={NotFoundPage} />
             </Switch>
           </div>

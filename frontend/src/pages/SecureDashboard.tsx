@@ -28,9 +28,13 @@ export function SecureDashboard() {
 
   useEffect(() => {
     getCurrentUser()
-      .then((u) => {
-        const name = (u as any).signInDetails?.loginId ?? u.username ?? "Veteran";
-        setUserName(name.split("@")[0]);
+      .then(async (u) => {
+        const { fetchUserAttributes } = await import("aws-amplify/auth");
+        const attrs = await fetchUserAttributes();
+        const name = attrs.name
+          || (u as any).signInDetails?.loginId?.split("@")[0]
+          || u.username;
+        setUserName(name ?? "Veteran");
       })
       .catch(() => setLocation("/"))
       .finally(() => setLoading(false));

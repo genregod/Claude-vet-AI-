@@ -12,6 +12,8 @@
  */
 
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { getCurrentUser } from "aws-amplify/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,9 +46,17 @@ import {
 } from "lucide-react";
 
 export function StartClaimPage() {
+  const [, setLocation] = useLocation();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  // Auth guard: redirect authenticated users straight to dashboard
+  useEffect(() => {
+    getCurrentUser()
+      .then(() => setLocation("/dashboard"))
+      .catch(() => {}); // not signed in — show signup form
+  }, []);
 
   // Check for existing session on mount
   useEffect(() => {

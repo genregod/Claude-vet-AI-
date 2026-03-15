@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
 import { Hub } from "aws-amplify/utils";
@@ -21,12 +21,13 @@ async function resolveDestination(): Promise<"/dashboard" | "/onboarding"> {
 
 export function AuthCallback() {
   const [, setLocation] = useLocation();
-  const handled = useRef(false);
 
   useEffect(() => {
-    const go = async () => {
-      if (handled.current) return;
-      handled.current = true;
+    let navigated = false;
+
+    const doNavigate = async () => {
+      if (navigated) return;
+      navigated = true;
       try {
         setLocation(await resolveDestination());
       } catch {
@@ -34,21 +35,23 @@ export function AuthCallback() {
       }
     };
 
-    // OAuth path: wait for Amplify to finish the code exchange
+    // OAuth path: Amplify fires 'signedIn' once the code exchange completes
     const unsubscribe = Hub.listen("auth", ({ payload }) => {
-      if (payload.event === "signedIn" || payload.event === "signInWithRedirect") {
+      if (payload.event === "signedIn") {
         unsubscribe();
-        go();
+        doNavigate();
       } else if (payload.event === "signInWithRedirect_failure") {
         unsubscribe();
+        navigated = true;
         setLocation("/login");
       }
     });
 
     // Email/password path: user is already signed in when they hit /callback
-    go().catch(() => {
-      // Not signed in yet — Hub listener above will handle OAuth completion
-    });
+    // IMPORTANT: failure here is silent — OAuth exchange may still be in progress
+    getCurrentUser()
+      .then(() => { unsubscribe(); doNavigate(); })
+      .catch(() => { /* OAuth in progress — Hub listener above will fire */ });
 
     return () => unsubscribe();
   }, []);

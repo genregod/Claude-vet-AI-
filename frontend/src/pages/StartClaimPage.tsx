@@ -27,6 +27,7 @@ import {
   getSessionFromStorage,
   clearSessionStorage,
 } from "@/lib/claimsApi";
+import { signInWithRedirect } from "aws-amplify/auth";
 import {
   Shield,
   Lock,
@@ -39,6 +40,7 @@ import {
   Users,
   FileCheck,
   Loader2,
+  Github,
 } from "lucide-react";
 
 export function StartClaimPage() {
@@ -262,6 +264,19 @@ function SignupSplash({ onSessionCreated }: SignupSplashProps) {
               </div>
 
               <form onSubmit={handleSignup} className="space-y-4">
+                {/* OAuth */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => signInWithRedirect({ provider: { custom: "GitHub" } })}
+                >
+                  <Github size={16} /> Continue with GitHub
+                </Button>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-200" /></div>
+                  <div className="relative flex justify-center text-xs text-gray-400 bg-white px-2">or create account with email</div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="signup_first">First Name *</Label>

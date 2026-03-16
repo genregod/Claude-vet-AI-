@@ -94,28 +94,44 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
       
       setMessages((prev) => [...prev, userMessage, loadingMessage]);
       setMessage("");
-      
+
       try {
-        // Send message to FastAPI backend
-        const response = await apiRequest("POST", "/chat", {
-          question: userMessage.content,
-          session_id: sessionId
+        const API_BASE = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+        const url = `${API_BASE}/api/chat/stream`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: userMessage.content, session_id: sessionId }),
         });
-        const chatResponse: ChatResponse = await response.json();
-        
-        // Update loading message with AI response
-        setMessages((prev) => 
-          prev.map((msg) => 
-            msg.id === loadingMessage.id 
-              ? { 
-                  ...msg, 
-                  content: chatResponse.answer, 
-                  isLoading: false,
-                  sources: chatResponse.sources 
-                }
-              : msg
-          )
+
+        if (!res.ok || !res.body) throw new Error(`${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+
+        // Switch loading bubble to streaming mode immediately
+        setMessages((prev) =>
+          prev.map((msg) => msg.id === loadingMessage.id ? { ...msg, isLoading: false, content: "" } : msg)
         );
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") break;
+            try {
+              const { token } = JSON.parse(data);
+              accumulated += token;
+              setMessages((prev) =>
+                prev.map((msg) => msg.id === loadingMessage.id ? { ...msg, content: accumulated } : msg)
+              );
+            } catch { /* skip malformed */ }
+          }
+        }
       } catch (error) {
         // Update loading message with error
         setMessages((prev) => 

@@ -163,6 +163,34 @@ class RAGChain:
             },
         )
 
+    # ── Streaming chat ───────────────────────────────────────────────
+
+    def ask_stream(
+        self,
+        question: str,
+        conversation_history: list[dict] | None = None,
+        source_type_filter: str | None = None,
+        top_k: int | None = None,
+    ):
+        """Yield SSE-formatted text chunks from Claude for real-time streaming."""
+        import json
+        k = top_k or settings.retrieval_top_k
+        retrieved = self._store.query(query_text=question, top_k=k, source_type_filter=source_type_filter)
+        system_prompt = build_prompt(context_blocks=retrieved, question=question)
+        messages: list[dict] = list(conversation_history or [])
+        messages.append({"role": "user", "content": question})
+
+        with self._client.messages.stream(
+            model=settings.claude_model,
+            max_tokens=settings.claude_max_tokens,
+            temperature=settings.claude_temperature,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                yield f"data: {json.dumps({'token': text})}\n\n"
+        yield "data: [DONE]\n\n"
+
     # ── Case evaluation (one-shot) ───────────────────────────────────
 
     def evaluate(

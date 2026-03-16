@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     claude_max_tokens: int = 4096
     claude_temperature: float = 0.2  # low temp for factual legal analysis
 
+    # ── VA Lighthouse API ────────────────────────────────────────────
+    va_client_id: str = ""
+    va_client_secret: str = ""
+
     # ── Embeddings ───────────────────────────────────────────────────
     # Primary: Voyage AI voyage-law-2 (legal-optimized)
     # Fallback: HuggingFace sentence-transformers

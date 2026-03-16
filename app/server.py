@@ -35,7 +35,7 @@ from enum import Enum
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware as _BHMW
@@ -58,6 +58,7 @@ from app.pii_shield import install_log_scrubber
 from app.prompts import QUICK_ACTION_QUERIES
 from app.rag_chain import RAGChain
 from app.dbq_routes import router as dbq_router
+from app.va_routes import router as va_router
 from app.claim_store import DynamoSessionStore, ClaimProfileStore
 from app.claim_intake import extract_claim_data, get_next_intake_question
 from app.cognito_auth import decode_cognito_token, is_cognito_token
@@ -121,6 +122,7 @@ app.include_router(claims_router)
 
 # Mount DBQ assessment routes
 app.include_router(dbq_router)
+app.include_router(va_router)
 
 
 # ── /api prefix support ─────────────────────────────────────────────
@@ -386,6 +388,33 @@ async def chat(request: ChatRequest, http_request: Request):
 
 
 # ── Quick actions (chat widget buttons) ──────────────────────────────
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest, http_request: Request):
+    """SSE endpoint — streams Claude tokens as they arrive."""
+    if rag_chain is None:
+        raise HTTPException(status_code=503, detail="Service initializing.")
+    user_id = getattr(http_request.state, "user_id", None)
+    history: list[dict] = []
+    if request.session_id:
+        if user_id:
+            history = dynamo_sessions.get_history(user_id, request.session_id)
+        else:
+            sess = session_store.get_session(request.session_id)
+            if sess:
+                history = sess.get("history", [])
+
+    return StreamingResponse(
+        rag_chain.ask_stream(
+            question=request.question,
+            conversation_history=history,
+            source_type_filter=request.source_type_filter,
+            top_k=request.top_k,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
 
 @app.post("/chat/quick-action", response_model=ChatResponse)
 async def quick_action(request: QuickActionRequest):

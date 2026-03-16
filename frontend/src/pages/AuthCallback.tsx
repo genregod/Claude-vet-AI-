@@ -37,10 +37,12 @@ export function AuthCallback() {
 
     // OAuth path: Amplify fires 'signedIn' once the code exchange completes
     const unsubscribe = Hub.listen("auth", ({ payload }) => {
+      console.log("[AuthCallback] Hub event:", payload.event, (payload as any).data ?? "");
       if (payload.event === "signedIn") {
         unsubscribe();
         doNavigate();
       } else if (payload.event === "signInWithRedirect_failure") {
+        console.error("[AuthCallback] OAuth failure:", (payload as any).data);
         unsubscribe();
         navigated = true;
         setLocation("/login");

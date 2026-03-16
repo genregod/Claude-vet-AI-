@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { getCurrentUser } from "aws-amplify/auth";
+import { getCurrentUser, fetchUserAttributes } from "aws-amplify/auth";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BulkUpload } from "@/components/BulkUpload";
@@ -29,7 +29,6 @@ export function SecureDashboard() {
   useEffect(() => {
     getCurrentUser()
       .then(async (u) => {
-        const { fetchUserAttributes } = await import("aws-amplify/auth");
         const attrs = await fetchUserAttributes();
         const name = attrs.name
           || (u as any).signInDetails?.loginId?.split("@")[0]

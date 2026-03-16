@@ -27,7 +27,7 @@ interface SimpleChatWindowProps {
 
 export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
   const [message, setMessage] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID());
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -199,7 +199,7 @@ export function SimpleChatWindow({ isOpen, onClose }: SimpleChatWindowProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-96 h-[600px]">
+    <div className="fixed bottom-28 right-4 z-50 w-96 h-[600px]">
       <Card className="h-full flex flex-col shadow-2xl border-2 border-navy-700">
         <CardHeader className="bg-gradient-to-r from-navy-700 to-navy-800 text-white p-4">
           <div className="flex items-center justify-between">

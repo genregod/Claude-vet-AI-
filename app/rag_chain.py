@@ -319,7 +319,7 @@ class RAGChain:
             corrections=corrections,
         )
 
-        messages: list[dict] = list(conversation_history)
+        messages: list[dict] = list(conversation_history[-6:])  # keep last 6 turns only
         # If no history yet, prime with a start signal
         if not messages:
             messages = [{"role": "user", "content": "Please begin the verification process."}]
@@ -331,8 +331,8 @@ class RAGChain:
 
         message = self._client.messages.create(
             model="claude-opus-4-5-20251101",
-            max_tokens=16000,
-            thinking={"type": "enabled", "budget_tokens": 8000},
+            max_tokens=4096,
+            thinking={"type": "enabled", "budget_tokens": 1500},
             system=system_prompt,
             messages=messages,
         )

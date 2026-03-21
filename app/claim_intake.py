@@ -91,7 +91,7 @@ def extract_claim_data(conversation_history: list[dict]) -> dict | None:
 
     try:
         msg = _get_client().messages.create(
-            model="claude-haiku-4-20250514",  # fast + cheap for extraction
+            model="claude-haiku-4-5-20251001",  # fast + cheap for extraction
             max_tokens=512,
             messages=[
                 {"role": "user", "content": f"{_EXTRACT_PROMPT}\n\nCONVERSATION:\n{convo_text}"}

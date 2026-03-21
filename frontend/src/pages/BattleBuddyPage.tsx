@@ -3,22 +3,39 @@ import { useLocation } from "wouter";
 import {
   Users, Send, Loader2, ArrowLeft, Upload, FileText,
   Shield, Heart, Clock, AlertTriangle, CheckCircle, ChevronRight,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { VerificationChat } from "@/components/VerificationChat";
 import { getCurrentUser } from "aws-amplify/auth";
 
 const API = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
 const MAX_FILES = 30;
 
-type Tab = "upload" | "profile" | "benefits" | "chat";
+type Tab = "upload" | "verify" | "profile" | "benefits" | "chat";
 
-interface UploadedFile { file: File; s3_key: string; status: "pending" | "uploading" | "done" | "error"; progress: number; }
+interface UploadedFile {
+  file: File;
+  s3_key: string;
+  status: "pending" | "uploading" | "done" | "error";
+  progress: number;
+}
+
 interface ChatMsg { id: string; content: string; isUser: boolean; }
-interface Profile { personal: Record<string, string>; service: any[]; claims: any[]; appeals: any[]; benefits: { awarded: any[]; available: any[] }; documents: any[]; notes: string; }
+
+interface Profile {
+  personal: Record<string, string>;
+  service: any[];
+  claims: any[];
+  appeals: any[];
+  benefits: { awarded: any[]; available: any[] };
+  documents: any[];
+  notes: string;
+}
 
 async function pollResult(jobId: string, signal: AbortSignal): Promise<string> {
   for (let i = 0; i < 90; i++) {
@@ -39,10 +56,10 @@ export function BattleBuddyPage() {
 
   // Upload state
   const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [processing, setProcessing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [processJobIds, setProcessJobIds] = useState<string[]>([]);
   const [processedCount, setProcessedCount] = useState(0);
-  const dropRef = useRef<HTMLDivElement>(null);
+  const [allProcessed, setAllProcessed] = useState(false);
 
   // Profile state
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -72,7 +89,10 @@ export function BattleBuddyPage() {
 
   const addFiles = (incoming: FileList | File[]) => {
     const arr = Array.from(incoming).slice(0, MAX_FILES - files.length);
-    setFiles(prev => [...prev, ...arr.map(f => ({ file: f, s3_key: "", status: "pending" as const, progress: 0 }))]);
+    setFiles(prev => [
+      ...prev,
+      ...arr.map(f => ({ file: f, s3_key: "", status: "pending" as const, progress: 0 })),
+    ]);
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -82,26 +102,31 @@ export function BattleBuddyPage() {
 
   const uploadAll = async () => {
     if (!userId || files.length === 0) return;
-    setProcessing(true);
+    setUploading(true);
 
     const uploaded: { s3_key: string; filename: string }[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      if (f.status === "done") { uploaded.push({ s3_key: f.s3_key, filename: f.file.name }); continue; }
+      if (f.status === "done") {
+        uploaded.push({ s3_key: f.s3_key, filename: f.file.name });
+        continue;
+      }
 
       setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: "uploading" } : x));
 
       try {
-        // Get presigned URL
         const pr = await fetch(`${API}/api/battle-buddy/upload-url`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: f.file.name, content_type: f.file.type || "application/octet-stream", user_id: userId }),
+          body: JSON.stringify({
+            filename: f.file.name,
+            content_type: f.file.type || "application/octet-stream",
+            user_id: userId,
+          }),
         });
         const { upload_url, s3_key } = await pr.json();
 
-        // Upload directly to S3
         await fetch(upload_url, {
           method: "PUT",
           headers: { "Content-Type": f.file.type || "application/octet-stream" },
@@ -109,13 +134,16 @@ export function BattleBuddyPage() {
         });
 
         uploaded.push({ s3_key, filename: f.file.name });
-        setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: "done", s3_key, progress: 100 } : x));
+        setFiles(prev => prev.map((x, idx) =>
+          idx === i ? { ...x, status: "done", s3_key, progress: 100 } : x
+        ));
       } catch {
-        setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: "error" } : x));
+        setFiles(prev => prev.map((x, idx) =>
+          idx === i ? { ...x, status: "error" } : x
+        ));
       }
     }
 
-    // Trigger async processing
     if (uploaded.length > 0) {
       const res = await fetch(`${API}/api/battle-buddy/process-docs`, {
         method: "POST",
@@ -126,7 +154,8 @@ export function BattleBuddyPage() {
       setProcessJobIds(job_ids);
       pollProcessingJobs(job_ids);
     }
-    setProcessing(false);
+
+    setUploading(false);
   };
 
   const pollProcessingJobs = async (jobIds: string[]) => {
@@ -139,7 +168,12 @@ export function BattleBuddyPage() {
         if (d.status === "done" || d.status === "error") {
           done++;
           setProcessedCount(done);
-          if (done === jobIds.length) loadProfile();
+          if (done === jobIds.length) {
+            setAllProcessed(true);
+            loadProfile();
+            // Auto-switch to verification tab
+            setTab("verify");
+          }
           return;
         }
       }
@@ -158,13 +192,16 @@ export function BattleBuddyPage() {
     }
   }, [userId]);
 
-  useEffect(() => { if (userId) loadProfile(); }, [userId, loadProfile]);
+  useEffect(() => {
+    if (userId) loadProfile();
+  }, [userId, loadProfile]);
 
   // ── Chat ─────────────────────────────────────────────────────────
 
   const sendChat = async (text: string) => {
     if (!text.trim() || chatLoading) return;
-    setMessages(prev => [...prev,
+    setMessages(prev => [
+      ...prev,
       { id: Date.now().toString(), content: text, isUser: true },
       { id: "thinking", content: "", isUser: false },
     ]);
@@ -180,33 +217,48 @@ export function BattleBuddyPage() {
       });
       const { job_id } = await pr.json();
       const answer = await pollResult(job_id, abortRef.current.signal);
-      setMessages(prev => [...prev.filter(m => m.id !== "thinking"),
-        { id: Date.now().toString(), content: answer, isUser: false }]);
-      setChatHistory(h => [...h, { role: "user", content: text }, { role: "assistant", content: answer }]);
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== "thinking"),
+        { id: Date.now().toString(), content: answer, isUser: false },
+      ]);
+      setChatHistory(h => [
+        ...h,
+        { role: "user", content: text },
+        { role: "assistant", content: answer },
+      ]);
     } catch (err: unknown) {
       if ((err as Error).message === "aborted") return;
-      setMessages(prev => [...prev.filter(m => m.id !== "thinking"),
-        { id: Date.now().toString(), content: "Something went wrong — try again.", isUser: false }]);
-    } finally { setChatLoading(false); }
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== "thinking"),
+        { id: Date.now().toString(), content: "Something went wrong — try again.", isUser: false },
+      ]);
+    } finally {
+      setChatLoading(false); }
   };
 
-  // ── Render ───────────────────────────────────────────────────────
+  // ── Tabs ─────────────────────────────────────────────────────────
 
-  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "upload",   label: "Documents", icon: <Upload size={15} /> },
-    { id: "profile",  label: "Profile",   icon: <FileText size={15} /> },
-    { id: "benefits", label: "Benefits",  icon: <Heart size={15} /> },
-    { id: "chat",     label: "Chat",      icon: <Users size={15} /> },
+  const TABS: { id: Tab; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: "upload",   label: "Documents",    icon: <Upload size={14} /> },
+    { id: "verify",   label: "Verify",       icon: <ClipboardCheck size={14} />, badge: allProcessed ? "Ready" : undefined },
+    { id: "profile",  label: "Profile",      icon: <FileText size={14} /> },
+    { id: "benefits", label: "Benefits",     icon: <Heart size={14} /> },
+    { id: "chat",     label: "Chat",         icon: <Users size={14} /> },
   ];
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-6 space-y-4">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 space-y-4">
+
         {/* Header */}
         <div className="flex items-center gap-3">
-          <button onClick={() => setLocation("/dashboard")} className="text-gray-400 hover:text-navy"><ArrowLeft size={18} /></button>
-          <div className="bg-gradient-to-br from-navy to-navy-dark p-2 rounded-xl shadow"><Users className="h-5 w-5 text-gold" /></div>
+          <button onClick={() => setLocation("/dashboard")} className="text-gray-400 hover:text-navy">
+            <ArrowLeft size={18} />
+          </button>
+          <div className="bg-gradient-to-br from-navy to-navy-dark p-2 rounded-xl shadow">
+            <Users className="h-5 w-5 text-gold" />
+          </div>
           <div>
             <h1 className="font-black text-navy text-base leading-none">Battle Buddy</h1>
             <p className="text-xs text-gray-400">claude-opus-4-5 · Extended Reasoning · Claimant Profile</p>
@@ -214,12 +266,22 @@ export function BattleBuddyPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                tab === t.id ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-navy"}`}>
-              {t.icon}{t.label}
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 min-w-fit flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                tab === t.id ? "bg-white text-navy shadow-sm" : "text-gray-500 hover:text-navy"
+              }`}
+            >
+              {t.icon}
+              {t.label}
+              {t.badge && (
+                <span className="ml-1 bg-gold text-navy text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {t.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -228,7 +290,6 @@ export function BattleBuddyPage() {
         {tab === "upload" && (
           <div className="space-y-4">
             <div
-              ref={dropRef}
               onDrop={onDrop}
               onDragOver={e => e.preventDefault()}
               className="border-2 border-dashed border-gray-300 hover:border-navy rounded-2xl p-10 text-center cursor-pointer transition-colors"
@@ -236,9 +297,17 @@ export function BattleBuddyPage() {
             >
               <Upload className="mx-auto h-10 w-10 text-gray-300 mb-3" />
               <p className="font-semibold text-gray-600">Drop up to {MAX_FILES} files here</p>
-              <p className="text-xs text-gray-400 mt-1">DD-214, rating decisions, medical records, claim letters — PDF, images, text · Up to 5 GB per file</p>
-              <input id="file-input" type="file" multiple accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp"
-                className="hidden" onChange={e => e.target.files && addFiles(e.target.files)} />
+              <p className="text-xs text-gray-400 mt-1">
+                DD-214, rating decisions, medical records, claim letters — PDF, images, text · Up to 5 GB per file
+              </p>
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={e => e.target.files && addFiles(e.target.files)}
+              />
             </div>
 
             {files.length > 0 && (
@@ -264,49 +333,94 @@ export function BattleBuddyPage() {
               </div>
             )}
 
-            {processedCount > 0 && processedCount === processJobIds.length && (
+            {allProcessed && (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
                 <CheckCircle className="text-green-600 shrink-0" size={20} />
                 <div>
-                  <p className="font-semibold text-green-800 text-sm">Profile built from {processedCount} document{processedCount > 1 ? "s" : ""}</p>
-                  <button className="text-xs text-green-700 underline mt-0.5" onClick={() => setTab("profile")}>View your profile →</button>
+                  <p className="font-semibold text-green-800 text-sm">
+                    {processedCount} document{processedCount > 1 ? "s" : ""} analyzed — profile ready for verification
+                  </p>
+                  <button
+                    className="text-xs text-green-700 underline mt-0.5"
+                    onClick={() => setTab("verify")}
+                  >
+                    Start verification →
+                  </button>
                 </div>
               </div>
             )}
 
-            <Button className="w-full bg-navy text-white hover:bg-navy-dark" onClick={uploadAll}
-              disabled={processing || files.length === 0 || files.every(f => f.status === "done")}>
-              {processing ? <><Loader2 size={15} className="animate-spin mr-2" />Uploading…</> : `Upload & Analyze ${files.length} File${files.length !== 1 ? "s" : ""}`}
+            <Button
+              className="w-full bg-navy text-white hover:bg-navy-dark"
+              onClick={uploadAll}
+              disabled={uploading || files.length === 0 || files.every(f => f.status === "done")}
+            >
+              {uploading
+                ? <><Loader2 size={15} className="animate-spin mr-2" />Uploading…</>
+                : `Upload & Analyze ${files.length} File${files.length !== 1 ? "s" : ""}`}
             </Button>
+          </div>
+        )}
+
+        {/* ── Verify Tab ── */}
+        {tab === "verify" && (
+          <div>
+            {!allProcessed && !profile && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center text-gray-400">
+                <ClipboardCheck className="mx-auto h-10 w-10 mb-3 opacity-30" />
+                <p className="font-semibold">No documents processed yet</p>
+                <p className="text-sm mt-1">Upload your documents first, then come back here to verify the extracted data.</p>
+                <Button variant="outline" className="mt-4 border-navy text-navy" onClick={() => setTab("upload")}>
+                  Upload Documents
+                </Button>
+              </div>
+            )}
+            {(allProcessed || profile) && userId && (
+              <VerificationChat
+                userId={userId}
+                profile={(profile ?? {}) as Record<string, unknown>}
+                onProfileUpdate={updated => setProfile(updated as unknown as Profile)}
+                onComplete={() => { loadProfile(); setTab("profile"); }}
+              />
+            )}
           </div>
         )}
 
         {/* ── Profile Tab ── */}
         {tab === "profile" && (
           <div className="space-y-4">
-            {profileLoading && <div className="flex justify-center py-12"><Loader2 className="animate-spin text-navy h-8 w-8" /></div>}
+            {profileLoading && (
+              <div className="flex justify-center py-12">
+                <Loader2 className="animate-spin text-navy h-8 w-8" />
+              </div>
+            )}
             {!profileLoading && !profile?.service?.length && !profile?.claims?.length && (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center text-gray-400">
                 <FileText className="mx-auto h-10 w-10 mb-3 opacity-30" />
                 <p className="font-semibold">No profile data yet</p>
                 <p className="text-sm mt-1">Upload your documents to build your claimant profile.</p>
-                <Button variant="outline" className="mt-4 border-navy text-navy" onClick={() => setTab("upload")}>Upload Documents</Button>
+                <Button variant="outline" className="mt-4 border-navy text-navy" onClick={() => setTab("upload")}>
+                  Upload Documents
+                </Button>
               </div>
             )}
             {!profileLoading && profile && (
               <>
-                {/* Personal */}
                 {Object.keys(profile.personal || {}).length > 0 && (
                   <Section title="Personal Information" icon={<Shield size={15} />}>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                      {Object.entries(profile.personal).map(([k, v]) => v ? (
-                        <div key={k}><dt className="text-gray-400 text-xs capitalize">{k.replace(/_/g, " ")}</dt><dd className="font-medium text-gray-800">{v}</dd></div>
-                      ) : null)}
+                      {Object.entries(profile.personal).map(([k, v]) =>
+                        v ? (
+                          <div key={k}>
+                            <dt className="text-gray-400 text-xs capitalize">{k.replace(/_/g, " ")}</dt>
+                            <dd className="font-medium text-gray-800">{v}</dd>
+                          </div>
+                        ) : null
+                      )}
                     </dl>
                   </Section>
                 )}
 
-                {/* Service Timeline */}
                 {profile.service?.length > 0 && (
                   <Section title="Service Timeline" icon={<Clock size={15} />}>
                     {profile.service.map((s, i) => (
@@ -322,7 +436,6 @@ export function BattleBuddyPage() {
                   </Section>
                 )}
 
-                {/* Claims */}
                 {profile.claims?.length > 0 && (
                   <Section title="Claims History" icon={<FileText size={15} />}>
                     {profile.claims.map((c, i) => (
@@ -331,29 +444,44 @@ export function BattleBuddyPage() {
                           <span className="font-semibold text-sm text-gray-800">#{c.claim_number || "—"}</span>
                           <StatusBadge status={c.status} />
                         </div>
-                        <p className="text-xs text-gray-500">Filed: {c.filed_date || "—"} · Decision: {c.decision_date || "pending"}</p>
-                        {c.conditions?.length > 0 && <p className="text-xs text-gray-600">Conditions: {c.conditions.join(", ")}</p>}
-                        {c.rating > 0 && <p className="text-xs font-semibold text-navy">Rating: {c.rating}%</p>}
-                        {c.denial_reason && <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1 mt-1">Denial: {c.denial_reason}</p>}
+                        <p className="text-xs text-gray-500">
+                          Filed: {c.filed_date || "—"} · Decision: {c.decision_date || "pending"}
+                        </p>
+                        {c.conditions?.length > 0 && (
+                          <p className="text-xs text-gray-600">Conditions: {c.conditions.join(", ")}</p>
+                        )}
+                        {c.rating > 0 && (
+                          <p className="text-xs font-semibold text-navy">Rating: {c.rating}%</p>
+                        )}
+                        {c.denial_reason && (
+                          <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1 mt-1">
+                            Denial: {c.denial_reason}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </Section>
                 )}
 
-                {/* Appeals */}
                 {profile.appeals?.length > 0 && (
                   <Section title="Appeals" icon={<AlertTriangle size={15} />}>
                     {profile.appeals.map((a, i) => (
                       <div key={i} className="rounded-xl border border-orange-100 bg-orange-50 p-3 space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-sm text-gray-800">Claim #{a.claim_number || "—"}</span>
-                          {a.deadline && <span className="text-xs font-bold text-red-600">Deadline: {a.deadline}</span>}
+                          {a.deadline && (
+                            <span className="text-xs font-bold text-red-600">Deadline: {a.deadline}</span>
+                          )}
                         </div>
-                        <p className="text-xs text-gray-500">Denial date: {a.denial_date || "—"} · Status: {a.status || "not filed"}</p>
+                        <p className="text-xs text-gray-500">
+                          Denial date: {a.denial_date || "—"} · Status: {a.status || "not filed"}
+                        </p>
                         {a.draft && (
                           <div className="mt-2">
                             <p className="text-xs font-semibold text-gray-700 mb-1">Draft Appeal Opening:</p>
-                            <p className="text-xs text-gray-600 bg-white rounded p-2 border border-orange-200">{a.draft}</p>
+                            <p className="text-xs text-gray-600 bg-white rounded p-2 border border-orange-200">
+                              {a.draft}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -379,7 +507,9 @@ export function BattleBuddyPage() {
                 <Heart className="mx-auto h-10 w-10 mb-3 opacity-30" />
                 <p className="font-semibold">No benefits data yet</p>
                 <p className="text-sm mt-1">Upload your documents to discover awarded and available benefits.</p>
-                <Button variant="outline" className="mt-4 border-navy text-navy" onClick={() => setTab("upload")}>Upload Documents</Button>
+                <Button variant="outline" className="mt-4 border-navy text-navy" onClick={() => setTab("upload")}>
+                  Upload Documents
+                </Button>
               </div>
             )}
 
@@ -431,7 +561,10 @@ export function BattleBuddyPage() {
                     </div>
                   ) : (
                     <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                      m.isUser ? "bg-navy text-white rounded-br-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
+                      m.isUser
+                        ? "bg-navy text-white rounded-br-sm"
+                        : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                    }`}>
                       {m.content}
                     </div>
                   )}
@@ -440,9 +573,18 @@ export function BattleBuddyPage() {
               <div ref={bottomRef} />
             </div>
             <form onSubmit={e => { e.preventDefault(); sendChat(chatInput); }} className="flex gap-2">
-              <Input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                placeholder="Ask your Battle Buddy…" disabled={chatLoading} className="flex-1" />
-              <Button type="submit" disabled={chatLoading || !chatInput.trim()} className="bg-navy text-white hover:bg-navy-dark px-4">
+              <Input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                placeholder="Ask your Battle Buddy…"
+                disabled={chatLoading}
+                className="flex-1"
+              />
+              <Button
+                type="submit"
+                disabled={chatLoading || !chatInput.trim()}
+                className="bg-navy text-white hover:bg-navy-dark px-4"
+              >
                 {chatLoading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
               </Button>
             </form>
@@ -454,7 +596,13 @@ export function BattleBuddyPage() {
   );
 }
 
-function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+// ── Shared sub-components ─────────────────────────────────────────────
+
+function Section({ title, icon, children }: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
       <h2 className="flex items-center gap-2 font-bold text-navy text-sm uppercase tracking-wide">

@@ -117,3 +117,46 @@ def _compute_appeal_deadlines(profile: dict) -> None:
                 "status": "not_filed",
                 "draft": "",
             })
+
+
+def update_field(user_id: str, field_path: str, value) -> dict:
+    """
+    Update a single field in the claimant profile using dot-notation path.
+    Supports array indexing: e.g. "service[0].branch", "claims[1].status"
+    Returns the updated profile.
+    """
+    import re
+
+    profile = get_profile(user_id)
+
+    def _set(obj, parts):
+        if not parts:
+            return
+        part = parts[0]
+        rest = parts[1:]
+
+        # Array index: e.g. "service[0]"
+        arr_match = re.match(r"^(\w+)\[(\d+)\]$", part)
+        if arr_match:
+            key, idx = arr_match.group(1), int(arr_match.group(2))
+            if key not in obj or not isinstance(obj[key], list):
+                obj[key] = []
+            while len(obj[key]) <= idx:
+                obj[key].append({})
+            if rest:
+                _set(obj[key][idx], rest)
+            else:
+                obj[key][idx] = value
+        else:
+            if rest:
+                if part not in obj or not isinstance(obj[part], dict):
+                    obj[part] = {}
+                _set(obj[part], rest)
+            else:
+                obj[part] = value
+
+    # Split path: "service[0].branch" → ["service[0]", "branch"]
+    parts = re.split(r"\.", field_path)
+    _set(profile, parts)
+    save_profile(profile)
+    return profile

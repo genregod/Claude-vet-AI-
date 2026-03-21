@@ -287,3 +287,88 @@ class RAGChain:
                 "output_tokens": message.usage.output_tokens,
             },
         )
+
+    # ── Profile Verification (claude-opus-4-5 + extended thinking) ──────────────
+
+    def verify_profile(
+        self,
+        profile: dict,
+        conversation_history: list[dict],
+        confirmed_fields: list[str],
+        skipped_fields: list[str],
+        corrections: dict,
+    ) -> dict:
+        """
+        Drive the human-in-the-loop profile verification conversation.
+
+        Uses claude-opus-4-5 with extended thinking to reason through the profile,
+        determine the next field to verify, and generate a structured response.
+
+        Returns a dict matching the VERIFY_PROMPT output schema:
+          message, section, field_path, progress, quick_replies,
+          profile_update, confirmed_fields, skipped_fields, done
+        """
+        import json
+        import re
+        from app.prompts import build_verify_prompt
+
+        system_prompt = build_verify_prompt(
+            profile=profile,
+            confirmed_fields=confirmed_fields,
+            skipped_fields=skipped_fields,
+            corrections=corrections,
+        )
+
+        messages: list[dict] = list(conversation_history)
+        # If no history yet, prime with a start signal
+        if not messages:
+            messages = [{"role": "user", "content": "Please begin the verification process."}]
+
+        logger.info(
+            "verify_profile — confirmed=%d skipped=%d history_turns=%d",
+            len(confirmed_fields), len(skipped_fields), len(conversation_history),
+        )
+
+        message = self._client.messages.create(
+            model="claude-opus-4-5-20251101",
+            max_tokens=4096,
+            thinking={"type": "enabled", "budget_tokens": 8000},
+            system=system_prompt,
+            messages=messages,
+        )
+
+        # Extract text block (skip thinking blocks)
+        raw = " ".join(
+            block.text for block in message.content if block.type == "text"
+        ).strip()
+
+        # Strip markdown fences if model wraps in ```json
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+        raw = re.sub(r"\s*```$", "", raw, flags=re.MULTILINE)
+        raw = raw.strip()
+
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.error("verify_profile JSON parse failed. Raw: %s", raw[:500])
+            # Graceful fallback — ask the veteran to try again
+            result = {
+                "message": "I had trouble processing that. Could you repeat your last response?",
+                "section": "unknown",
+                "field_path": "",
+                "progress": max(
+                    round((len(confirmed_fields) + len(skipped_fields)) / max(1, len(confirmed_fields) + len(skipped_fields) + 5) * 100),
+                    0,
+                ),
+                "quick_replies": ["Correct", "Not right", "More detail", "Skip for now"],
+                "profile_update": None,
+                "confirmed_fields": confirmed_fields,
+                "skipped_fields": skipped_fields,
+                "done": False,
+            }
+
+        result["_usage"] = {
+            "input_tokens": message.usage.input_tokens,
+            "output_tokens": message.usage.output_tokens,
+        }
+        return result

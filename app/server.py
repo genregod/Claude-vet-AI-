@@ -38,6 +38,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from typing import Any
 from starlette.middleware.base import BaseHTTPMiddleware as _BHMW
 
 from app.auth import UserProfile
@@ -506,6 +507,60 @@ async def battle_buddy_result(job_id: str):
     if not item:
         raise HTTPException(status_code=404, detail="Job not found.")
     return item
+
+
+# ── Verification endpoints ────────────────────────────────────────────
+
+class VerifyRequest(BaseModel):
+    user_id: str
+    conversation_history: list[dict] = []
+    confirmed_fields: list[str] = []
+    skipped_fields: list[str] = []
+    corrections: dict = {}
+
+
+class FieldUpdateRequest(BaseModel):
+    field_path: str
+    value: Any
+
+
+@app.post("/battle-buddy/verify")
+async def verify_profile_endpoint(req: VerifyRequest):
+    """
+    Enqueue an async verification turn.
+    Returns job_id immediately; poll /battle-buddy/result/{job_id} for the response.
+    """
+    job_id = str(uuid.uuid4())
+    _bb_table.put_item(Item={
+        "job_id": job_id,
+        "status": "pending",
+        "ttl": int(_time.time()) + 3600,
+    })
+    _lambda_client.invoke(
+        FunctionName=_FUNCTION_NAME,
+        InvocationType="Event",
+        Payload=_json.dumps({"verify_job": {
+            "job_id": job_id,
+            "user_id": req.user_id,
+            "conversation_history": req.conversation_history,
+            "confirmed_fields": req.confirmed_fields,
+            "skipped_fields": req.skipped_fields,
+            "corrections": req.corrections,
+        }}),
+    )
+    return {"job_id": job_id, "status": "pending"}
+
+
+@app.post("/battle-buddy/profile/{user_id}/update")
+async def update_profile_field(user_id: str, req: FieldUpdateRequest):
+    """Synchronously update a single profile field by dot-notation path."""
+    from app.claim_profile import update_field
+    try:
+        profile = update_field(user_id, req.field_path, req.value)
+        return {"status": "ok", "updated_field": req.field_path, "profile": profile}
+    except Exception as exc:
+        logger.exception("Field update failed for user %s field %s", user_id, req.field_path)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ── Quick actions (chat widget buttons) ──────────────────────────────

@@ -11,9 +11,20 @@ RUN groupadd -r valoruser && useradd -r -g valoruser valoruser
 
 WORKDIR /opt/valor-assist
 
-# Install dependencies first (layer caching)
+# HuggingFace cache must live in /tmp — the only writable path for non-root ECS tasks
+ENV HF_HOME=/tmp/hf_cache
+
+# Install Node for frontend build
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Build the React frontend
+COPY frontend/ frontend/
+RUN cd frontend && npm ci --silent && npm run build
 
 # Copy application code
 COPY app/ app/

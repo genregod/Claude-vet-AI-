@@ -1,9 +1,12 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { TextractClient, DetectDocumentTextCommand } = require('@aws-sdk/client-textract');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-const s3 = new AWS.S3();
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const textract = new AWS.Textract();
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const s3 = new S3Client({});
+const textract = new TextractClient({});
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 exports.handler = async (event) => {
@@ -14,24 +17,22 @@ exports.handler = async (event) => {
     };
 
     try {
-        const { fileName, userId, documentType } = JSON.parse(event.body);
+        const body = JSON.parse(event.body);
 
-        // Process document with Textract
+        // Route by action
+        if (event.httpMethod === 'GET' || body.action === 'list') {
+            return await handleListDocuments(event, headers);
+        }
+
+        const { fileName, userId, documentType } = body;
         const extractedText = await extractTextFromDocument(fileName, userId);
-
-        // Generate embeddings for RAG
         const embeddings = await generateEmbeddings(extractedText);
-
-        // Store document metadata
         await storeDocumentMetadata(userId, fileName, documentType, extractedText, embeddings);
 
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-                message: 'Document processed successfully',
-                documentId: `${userId}/${fileName}`
-            })
+            body: JSON.stringify({ message: 'Document processed successfully', documentId: `${userId}/${fileName}` })
         };
 
     } catch (error) {
@@ -44,17 +45,22 @@ exports.handler = async (event) => {
     }
 };
 
-async function extractTextFromDocument(fileName, userId) {
-    const params = {
-        Document: {
-            S3Object: {
-                Bucket: process.env.STORAGE_BUCKET,
-                Name: `public/${userId}/${fileName}`
-            }
-        }
-    };
+async function handleListDocuments(event, headers) {
+    const userId = event.queryStringParameters?.userId;
+    const result = await dynamo.send(new ScanCommand({
+        TableName: process.env.DOCUMENTS_TABLE,
+        FilterExpression: 'userId = :uid',
+        ExpressionAttributeValues: { ':uid': userId }
+    }));
+    return { statusCode: 200, headers, body: JSON.stringify({ documents: result.Items }) };
+}
 
-    const result = await textract.detectDocumentText(params).promise();
+async function extractTextFromDocument(fileName, userId) {
+    const result = await textract.send(new DetectDocumentTextCommand({
+        Document: {
+            S3Object: { Bucket: process.env.STORAGE_BUCKET, Name: `public/${userId}/${fileName}` }
+        }
+    }));
     return result.Blocks
         .filter(block => block.BlockType === 'LINE')
         .map(block => block.Text)
@@ -62,36 +68,23 @@ async function extractTextFromDocument(fileName, userId) {
 }
 
 async function generateEmbeddings(text) {
-    const params = {
+    const command = new InvokeModelCommand({
         modelId: 'amazon.titan-embed-text-v1',
         contentType: 'application/json',
         accept: 'application/json',
-        body: JSON.stringify({
-            inputText: text
-        })
-    };
-
-    const command = new InvokeModelCommand(params);
+        body: JSON.stringify({ inputText: text })
+    });
     const response = await bedrock.send(command);
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-    return responseBody.embedding;
+    return JSON.parse(new TextDecoder().decode(response.body)).embedding;
 }
 
 async function storeDocumentMetadata(userId, fileName, documentType, extractedText, embeddings) {
-    const params = {
+    await dynamo.send(new PutCommand({
         TableName: process.env.DOCUMENTS_TABLE,
         Item: {
-            userId: userId,
-            documentId: `${userId}/${fileName}`,
-            fileName: fileName,
-            documentType: documentType,
-            extractedText: extractedText,
-            embeddings: embeddings,
-            uploadDate: new Date().toISOString(),
-            processed: true
+            userId, documentId: `${userId}/${fileName}`, fileName,
+            documentType, extractedText, embeddings,
+            uploadDate: new Date().toISOString(), processed: true
         }
-    };
-
-    await dynamodb.put(params).promise();
+    }));
 }

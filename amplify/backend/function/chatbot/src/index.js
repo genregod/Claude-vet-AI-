@@ -1,7 +1,8 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, QueryCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
 
 exports.handler = async (event) => {
@@ -14,10 +15,8 @@ exports.handler = async (event) => {
     try {
         const { message, sessionId, userId } = JSON.parse(event.body);
 
-        // Get chat history
         const chatHistory = await getChatHistory(sessionId);
 
-        // Prepare context for battle buddy persona
         const systemPrompt = `You are a helpful battle buddy assistant for veterans completing Federal Disability Questionnaires (FDQ).
 
 Key traits:
@@ -30,26 +29,19 @@ Key traits:
 
 Your role is to help veterans navigate the FDQ process, understand requirements, and organize their documentation effectively.`;
 
-        // Prepare messages for Claude
         const messages = [
             { role: "system", content: systemPrompt },
             ...chatHistory,
             { role: "user", content: message }
         ];
 
-        // Call Anthropic Claude via Bedrock
         const response = await callClaude(messages);
-
-        // Save conversation to DynamoDB
         await saveChatMessage(sessionId, userId, message, response);
 
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-                response: response,
-                sessionId: sessionId
-            })
+            body: JSON.stringify({ response, sessionId })
         };
 
     } catch (error) {
@@ -63,7 +55,7 @@ Your role is to help veterans navigate the FDQ process, understand requirements,
 };
 
 async function callClaude(messages) {
-    const params = {
+    const command = new InvokeModelCommand({
         modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
         contentType: 'application/json',
         accept: 'application/json',
@@ -73,44 +65,28 @@ async function callClaude(messages) {
             messages: messages.filter(m => m.role !== 'system'),
             system: messages.find(m => m.role === 'system')?.content
         })
-    };
-
-    const command = new InvokeModelCommand(params);
+    });
     const response = await bedrock.send(command);
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
-
-    return responseBody.content[0].text;
+    return JSON.parse(new TextDecoder().decode(response.body)).content[0].text;
 }
 
 async function getChatHistory(sessionId) {
-    const params = {
+    const result = await dynamo.send(new QueryCommand({
         TableName: process.env.CHAT_HISTORY_TABLE,
         KeyConditionExpression: 'sessionId = :sessionId',
-        ExpressionAttributeValues: {
-            ':sessionId': sessionId
-        },
+        ExpressionAttributeValues: { ':sessionId': sessionId },
         ScanIndexForward: true,
         Limit: 10
-    };
-
-    const result = await dynamodb.query(params).promise();
-    return result.Items.map(item => [
+    }));
+    return result.Items.flatMap(item => [
         { role: 'user', content: item.userMessage },
         { role: 'assistant', content: item.botResponse }
-    ]).flat();
+    ]);
 }
 
 async function saveChatMessage(sessionId, userId, userMessage, botResponse) {
-    const params = {
+    await dynamo.send(new PutCommand({
         TableName: process.env.CHAT_HISTORY_TABLE,
-        Item: {
-            sessionId: sessionId,
-            timestamp: Date.now(),
-            userId: userId,
-            userMessage: userMessage,
-            botResponse: botResponse
-        }
-    };
-
-    await dynamodb.put(params).promise();
+        Item: { sessionId, timestamp: Date.now(), userId, userMessage, botResponse }
+    }));
 }

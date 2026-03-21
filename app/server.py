@@ -387,6 +387,72 @@ async def chat(request: ChatRequest, http_request: Request):
     )
 
 
+# ── Claimant Profile + Document Upload endpoints ─────────────────────
+
+import os as _os2
+
+_S3_CLIENT = boto3.client("s3", region_name="us-east-1")
+_S3_BUCKET = _os2.environ.get("S3_BUCKET", "valor-assist-documents-1773005280")
+_MAX_FILES = 30
+_PRESIGN_EXPIRY = 3600
+
+
+class PresignRequest(BaseModel):
+    filename: str
+    content_type: str = "application/octet-stream"
+    user_id: str
+
+
+class PresignResponse(BaseModel):
+    upload_url: str
+    s3_key: str
+
+
+class ProcessDocsRequest(BaseModel):
+    user_id: str
+    files: list[dict]
+
+
+@app.post("/battle-buddy/upload-url", response_model=PresignResponse)
+async def get_upload_url(req: PresignRequest):
+    """Presigned S3 PUT URL for direct browser upload — up to 5 GB per file."""
+    s3_key = f"claimant-docs/{req.user_id}/{uuid.uuid4()}_{req.filename}"
+    url = _S3_CLIENT.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": _S3_BUCKET, "Key": s3_key, "ContentType": req.content_type},
+        ExpiresIn=_PRESIGN_EXPIRY,
+    )
+    return PresignResponse(upload_url=url, s3_key=s3_key)
+
+
+@app.post("/battle-buddy/process-docs")
+async def process_docs(req: ProcessDocsRequest):
+    """Enqueue async doc-processing jobs (max 30 files)."""
+    import json as _j, time as _t
+    files = req.files[:_MAX_FILES]
+    job_ids = []
+    for f in files:
+        job_id = str(uuid.uuid4())
+        _bb_table.put_item(Item={"job_id": job_id, "status": "pending",
+                                  "ttl": int(_t.time()) + 7200})
+        boto3.client("lambda", region_name="us-east-1").invoke(
+            FunctionName=_os2.environ.get("AWS_LAMBDA_FUNCTION_NAME", "ValorAssist-API"),
+            InvocationType="Event",
+            Payload=_j.dumps({"doc_process_job": {
+                "job_id": job_id, "user_id": req.user_id,
+                "s3_key": f["s3_key"], "filename": f["filename"],
+            }}),
+        )
+        job_ids.append(job_id)
+    return {"job_ids": job_ids, "count": len(job_ids)}
+
+
+@app.get("/battle-buddy/profile/{user_id}")
+async def get_claimant_profile(user_id: str):
+    from app.claim_profile import get_profile
+    return get_profile(user_id)
+
+
 # ── Battle Buddy async endpoints (claude-opus-4-5 + extended thinking) ──
 
 import json as _json
@@ -402,6 +468,7 @@ _FUNCTION_NAME = _os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "ValorAssist-API")
 class BattleBuddyRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     conversation_history: list[dict] | None = None
+    user_id: str | None = None
 
 
 class BattleBuddyJobResponse(BaseModel):
@@ -425,6 +492,7 @@ async def battle_buddy_chat(request: BattleBuddyRequest):
             "job_id": job_id,
             "question": request.question,
             "conversation_history": request.conversation_history or [],
+            "user_id": request.user_id or "",
         }}),
     )
     return BattleBuddyJobResponse(job_id=job_id, status="pending")

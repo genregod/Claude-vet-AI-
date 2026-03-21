@@ -248,6 +248,7 @@ class RAGChain:
         question: str,
         conversation_history: list[dict] | None = None,
         top_k: int | None = None,
+        profile_context: str = "",
     ) -> RAGResponse:
         """
         Battle Buddy chat using claude-opus-4-5 with extended thinking.
@@ -258,6 +259,8 @@ class RAGChain:
         k = top_k or settings.retrieval_top_k
         retrieved = self._store.query(query_text=question, top_k=k)
         system_prompt = build_battle_buddy_prompt(context_blocks=retrieved)
+        if profile_context:
+            system_prompt = system_prompt + f"\n\n{profile_context}"
 
         messages: list[dict] = list(conversation_history or [])
         messages.append({"role": "user", "content": question})

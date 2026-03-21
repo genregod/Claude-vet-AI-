@@ -86,14 +86,19 @@ def merge_extracted(user_id: str, extracted: dict) -> dict:
 
 
 def _merge_list(target: dict, source: dict, key: str, key_fn) -> None:
-    existing = {key_fn(x): x for x in target.get(key, [])}
+    existing = target.get(key, [])
+    # Map dedup-key → list position for O(1) lookup and true in-place updates
+    index: dict[str, int] = {key_fn(x): i for i, x in enumerate(existing) if key_fn(x)}
     for item in source.get(key, []):
         k = key_fn(item)
-        if k and k in existing:
-            existing[k].update({kk: vv for kk, vv in item.items() if vv})
-        elif item:
-            existing[k or str(len(existing))] = item
-    target[key] = list(existing.values())
+        if not k:
+            continue  # skip records with no deduplication key — cannot safely merge
+        if k in index:
+            existing[index[k]].update({kk: vv for kk, vv in item.items() if vv})
+        else:
+            index[k] = len(existing)
+            existing.append(item)
+    target[key] = existing
 
 
 def _compute_appeal_deadlines(profile: dict) -> None:

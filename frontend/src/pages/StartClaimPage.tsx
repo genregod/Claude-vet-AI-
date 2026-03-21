@@ -49,7 +49,6 @@ export function StartClaimPage() {
   const [, setLocation] = useLocation();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
 
   // Auth guard: redirect authenticated users straight to dashboard
   useEffect(() => {
@@ -94,10 +93,8 @@ export function StartClaimPage() {
           <ClaimQuestionnaire
             sessionId={sessionId}
             onComplete={() => {
-              toast({
-                title: "Claim Complete",
-                description: "Your FDC package is ready for review.",
-              });
+              clearSessionStorage();
+              setLocation("/claim-confirmed");
             }}
           />
         </main>

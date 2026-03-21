@@ -13,6 +13,8 @@ import { HealthCheckPage } from "@/pages/HealthCheck.tsx";
 import { LoginPage } from "@/pages/LoginPage.tsx";
 import { AuthCallback } from "@/pages/AuthCallback.tsx";
 import { OnboardingPage } from "@/pages/OnboardingPage.tsx";
+import { ClaimConfirmedPage } from "@/pages/ClaimConfirmedPage.tsx";
+import { BattleBuddyPage } from "@/pages/BattleBuddyPage.tsx";
 import { NotFoundPage } from "@/pages/NotFound.tsx";
 import { ErrorBoundary, FallbackProps } from "react-error-boundary";
 
@@ -54,6 +56,8 @@ function App() {
               <Route path="/login" component={LoginPage} />
               <Route path="/callback" component={AuthCallback} />
               <Route path="/onboarding" component={OnboardingPage} />
+              <Route path="/claim-confirmed" component={ClaimConfirmedPage} />
+              <Route path="/battle-buddy" component={BattleBuddyPage} />
               <Route component={NotFoundPage} />
             </Switch>
           </div>

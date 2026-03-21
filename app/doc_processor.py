@@ -99,7 +99,6 @@ def process_document(user_id: str, s3_key: str, filename: str) -> dict:
     content: list[dict] = []
 
     if ext in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-        # Send as image
         media_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                      ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
         content.append({
@@ -108,6 +107,24 @@ def process_document(user_id: str, s3_key: str, filename: str) -> dict:
                        "data": base64.standard_b64encode(data).decode()},
         })
         content.append({"type": "text", "text": f"Document filename: {filename}"})
+    elif ext == ".pdf":
+        # Try pypdf first (fast, no token cost)
+        text = _extract_text_from_bytes(data, filename)
+        if text.strip():
+            content.append({"type": "text",
+                             "text": f"Document: {filename}\n\n{text[:_MAX_TEXT]}"})
+        else:
+            # Scanned PDF — send natively so Anthropic handles OCR
+            logger.info("No text from pypdf for %s — sending as native PDF", filename)
+            content.append({
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": base64.standard_b64encode(data).decode(),
+                },
+            })
+            content.append({"type": "text", "text": f"Document filename: {filename}"})
     else:
         text = _extract_text_from_bytes(data, filename)
         if not text:

@@ -387,34 +387,56 @@ async def chat(request: ChatRequest, http_request: Request):
     )
 
 
-# ── Battle Buddy endpoint (claude-opus-4-5 + extended thinking) ──────
+# ── Battle Buddy async endpoints (claude-opus-4-5 + extended thinking) ──
+
+import json as _json
+import os as _os
+import time as _time
+import boto3 as _boto3
+
+_bb_table = _boto3.resource("dynamodb", region_name="us-east-1").Table("ValorAssist-BattleBuddyJobs")
+_lambda_client = _boto3.client("lambda", region_name="us-east-1")
+_FUNCTION_NAME = _os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "ValorAssist-API")
+
 
 class BattleBuddyRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
-    session_id: str | None = None
     conversation_history: list[dict] | None = None
 
 
-@app.post("/battle-buddy/chat", response_model=ChatResponse)
-async def battle_buddy_chat(request: BattleBuddyRequest):
-    """Battle Buddy AI — claude-opus-4-5 with extended thinking."""
-    _require_initialized()
-    try:
-        result = rag_chain.battle_buddy(
-            question=request.question,
-            conversation_history=request.conversation_history,
-        )
-    except Exception as exc:
-        logger.exception("Battle Buddy error")
-        raise HTTPException(status_code=500, detail=str(exc))
+class BattleBuddyJobResponse(BaseModel):
+    job_id: str
+    status: str
 
-    return ChatResponse(
-        answer=result.answer,
-        sources=[SourceInfo(**s) for s in result.sources],
-        session_id=request.session_id,
-        model=result.model,
-        usage=result.usage,
+
+@app.post("/battle-buddy/chat", response_model=BattleBuddyJobResponse)
+async def battle_buddy_chat(request: BattleBuddyRequest):
+    """Enqueue a Battle Buddy job and return immediately with a job_id."""
+    job_id = str(uuid.uuid4())
+    _bb_table.put_item(Item={
+        "job_id": job_id,
+        "status": "pending",
+        "ttl": int(_time.time()) + 3600,
+    })
+    _lambda_client.invoke(
+        FunctionName=_FUNCTION_NAME,
+        InvocationType="Event",
+        Payload=_json.dumps({"battle_buddy_job": {
+            "job_id": job_id,
+            "question": request.question,
+            "conversation_history": request.conversation_history or [],
+        }}),
     )
+    return BattleBuddyJobResponse(job_id=job_id, status="pending")
+
+
+@app.get("/battle-buddy/result/{job_id}")
+async def battle_buddy_result(job_id: str):
+    """Poll for a Battle Buddy job result."""
+    item = _bb_table.get_item(Key={"job_id": job_id}).get("Item")
+    if not item:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return item
 
 
 # ── Quick actions (chat widget buttons) ──────────────────────────────

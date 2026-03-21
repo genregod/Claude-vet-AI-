@@ -21,6 +21,18 @@ const STARTERS = [
   "How does combined rating work?",
 ];
 
+async function pollResult(jobId: string, signal: AbortSignal): Promise<string> {
+  for (let i = 0; i < 90; i++) {
+    if (signal.aborted) throw new Error("aborted");
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await fetch(`${API_BASE}/api/battle-buddy/result/${jobId}`, { signal });
+    const data = await res.json();
+    if (data.status === "done") return data.answer;
+    if (data.status === "error") throw new Error(data.error || "Job failed");
+  }
+  throw new Error("Timed out waiting for response.");
+}
+
 export function BattleBuddyPage() {
   const [, setLocation] = useLocation();
   const [messages, setMessages] = useState<Message[]>([
@@ -35,6 +47,7 @@ export function BattleBuddyPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,31 +55,41 @@ export function BattleBuddyPage() {
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
+
     const userMsg: Message = { id: Date.now().toString(), content: text, isUser: true };
-    const thinkingMsg: Message = { id: "thinking", content: "", isUser: false };
-    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
+    setMessages((prev) => [...prev, userMsg, { id: "thinking", content: "", isUser: false }]);
     setInput("");
     setLoading(true);
 
-    const nextHistory = [...history, { role: "user", content: text }];
+    abortRef.current = new AbortController();
 
     try {
-      const res = await fetch(`${API_BASE}/api/battle-buddy/chat`, {
+      // POST → get job_id immediately
+      const postRes = await fetch(`${API_BASE}/api/battle-buddy/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text, conversation_history: history }),
+        signal: abortRef.current.signal,
       });
-      const data = await res.json();
-      const answer = data.answer ?? "Sorry, I couldn't get a response. Try again.";
+      const { job_id } = await postRes.json();
+
+      // Poll until done
+      const answer = await pollResult(job_id, abortRef.current.signal);
+
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== "thinking"),
         { id: Date.now().toString(), content: answer, isUser: false },
       ]);
-      setHistory([...nextHistory, { role: "assistant", content: answer }]);
-    } catch {
+      setHistory((h) => [...h, { role: "user", content: text }, { role: "assistant", content: answer }]);
+    } catch (err: unknown) {
+      if ((err as Error).message === "aborted") return;
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== "thinking"),
-        { id: Date.now().toString(), content: "Connection error — check your network and try again.", isUser: false },
+        {
+          id: Date.now().toString(),
+          content: (err as Error).message || "Something went wrong — try again.",
+          isUser: false,
+        },
       ]);
     } finally {
       setLoading(false);
@@ -98,7 +121,7 @@ export function BattleBuddyPage() {
               {m.id === "thinking" ? (
                 <div className="flex items-center gap-2 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
                   <Loader2 size={14} className="animate-spin" />
-                  Thinking…
+                  Thinking deeply…
                 </div>
               ) : (
                 <div
@@ -116,7 +139,7 @@ export function BattleBuddyPage() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Starters (only before first user message) */}
+        {/* Starters */}
         {messages.filter((m) => m.isUser).length === 0 && (
           <div className="grid grid-cols-2 gap-2">
             {STARTERS.map((s) => (
@@ -132,10 +155,7 @@ export function BattleBuddyPage() {
         )}
 
         {/* Input */}
-        <form
-          onSubmit={(e) => { e.preventDefault(); send(input); }}
-          className="flex gap-2"
-        >
+        <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -347,6 +347,12 @@ class RAGChain:
         raw = re.sub(r"\s*```$", "", raw, flags=re.MULTILINE)
         raw = raw.strip()
 
+        # Model sometimes prepends conversational text before the JSON object.
+        # Find the first '{' and attempt to parse from there.
+        json_start = raw.find("{")
+        if json_start > 0:
+            raw = raw[json_start:]
+
         try:
             result = json.loads(raw)
         except json.JSONDecodeError:

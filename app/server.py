@@ -390,8 +390,9 @@ async def chat(request: ChatRequest, http_request: Request):
 # ── Claimant Profile + Document Upload endpoints ─────────────────────
 
 import os as _os2
+import boto3 as _boto3_s3
 
-_S3_CLIENT = boto3.client("s3", region_name="us-east-1")
+_S3_CLIENT = _boto3_s3.client("s3", region_name="us-east-1")
 _S3_BUCKET = _os2.environ.get("S3_BUCKET", "valor-assist-documents-1773005280")
 _MAX_FILES = 30
 _PRESIGN_EXPIRY = 3600
@@ -435,7 +436,7 @@ async def process_docs(req: ProcessDocsRequest):
         job_id = str(uuid.uuid4())
         _bb_table.put_item(Item={"job_id": job_id, "status": "pending",
                                   "ttl": int(_t.time()) + 7200})
-        boto3.client("lambda", region_name="us-east-1").invoke(
+        _boto3_s3.client("lambda", region_name="us-east-1").invoke(
             FunctionName=_os2.environ.get("AWS_LAMBDA_FUNCTION_NAME", "ValorAssist-API"),
             InvocationType="Event",
             Payload=_j.dumps({"doc_process_job": {

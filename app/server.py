@@ -387,6 +387,36 @@ async def chat(request: ChatRequest, http_request: Request):
     )
 
 
+# ── Battle Buddy endpoint (claude-opus-4-5 + extended thinking) ──────
+
+class BattleBuddyRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    session_id: str | None = None
+    conversation_history: list[dict] | None = None
+
+
+@app.post("/battle-buddy/chat", response_model=ChatResponse)
+async def battle_buddy_chat(request: BattleBuddyRequest):
+    """Battle Buddy AI — claude-opus-4-5 with extended thinking."""
+    _require_initialized()
+    try:
+        result = rag_chain.battle_buddy(
+            question=request.question,
+            conversation_history=request.conversation_history,
+        )
+    except Exception as exc:
+        logger.exception("Battle Buddy error")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return ChatResponse(
+        answer=result.answer,
+        sources=[SourceInfo(**s) for s in result.sources],
+        session_id=request.session_id,
+        model=result.model,
+        usage=result.usage,
+    )
+
+
 # ── Quick actions (chat widget buttons) ──────────────────────────────
 
 @app.post("/chat/stream")

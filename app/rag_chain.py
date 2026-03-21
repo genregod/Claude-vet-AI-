@@ -240,3 +240,47 @@ class RAGChain:
                 "output_tokens": message.usage.output_tokens,
             },
         )
+
+    # ── Battle Buddy (claude-opus-4-5 + extended thinking) ──────────────────
+
+    def battle_buddy(
+        self,
+        question: str,
+        conversation_history: list[dict] | None = None,
+        top_k: int | None = None,
+    ) -> RAGResponse:
+        """
+        Battle Buddy chat using claude-opus-4-5 with extended thinking.
+        Thinking blocks are stripped from the response; only text is returned.
+        """
+        from app.prompts import build_battle_buddy_prompt
+
+        k = top_k or settings.retrieval_top_k
+        retrieved = self._store.query(query_text=question, top_k=k)
+        system_prompt = build_battle_buddy_prompt(context_blocks=retrieved)
+
+        messages: list[dict] = list(conversation_history or [])
+        messages.append({"role": "user", "content": question})
+
+        message = self._client.messages.create(
+            model="claude-opus-4-5-20251101",
+            max_tokens=16000,
+            thinking={"type": "enabled", "budget_tokens": 10000},
+            system=system_prompt,
+            messages=messages,
+        )
+
+        # Extract only text blocks (skip thinking blocks)
+        answer_text = " ".join(
+            block.text for block in message.content if block.type == "text"
+        ).strip()
+
+        return RAGResponse(
+            answer=answer_text,
+            sources=self._extract_sources(retrieved),
+            model="claude-opus-4-5-20251101",
+            usage={
+                "input_tokens": message.usage.input_tokens,
+                "output_tokens": message.usage.output_tokens,
+            },
+        )

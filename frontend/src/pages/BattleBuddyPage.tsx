@@ -1,169 +1,152 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Users, CheckCircle, Shield, Loader2 } from "lucide-react";
+import { Users, Send, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
-const BRANCHES = ["Army", "Navy", "Marine Corps", "Air Force", "Space Force", "Coast Guard", "National Guard / Reserve"];
-const ERAS = ["Vietnam Era", "Gulf War", "OEF/OIF/OND", "Post-9/11", "Other"];
-const TOPICS = [
-  { id: "claims", label: "VA Claims Navigation" },
-  { id: "mst", label: "MST / Trauma Support" },
-  { id: "mental_health", label: "Mental Health" },
-  { id: "transition", label: "Civilian Transition" },
-  { id: "housing", label: "Housing & Homelessness" },
-  { id: "employment", label: "Employment" },
+interface Message {
+  id: string;
+  content: string;
+  isUser: boolean;
+}
+
+const API_BASE = (import.meta.env.VITE_API_URL || "").trim().replace(/\/+$/, "");
+
+const STARTERS = [
+  "How do I appeal a VA denial?",
+  "What evidence do I need for PTSD?",
+  "Explain the AMA appeal lanes",
+  "How does combined rating work?",
 ];
 
 export function BattleBuddyPage() {
   const [, setLocation] = useLocation();
-  const [branch, setBranch] = useState("");
-  const [era, setEra] = useState("");
-  const [topics, setTopics] = useState<string[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "0",
+      content:
+        "Hey — I'm your Battle Buddy. I've been through the VA system and I'm here to help you navigate it. What's going on with your claim?",
+      isUser: false,
+    },
+  ]);
+  const [history, setHistory] = useState<{ role: string; content: string }[]>([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [error, setError] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const toggleTopic = (id: string) =>
-    setTopics((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  const handleSubmit = async () => {
-    if (!branch || !era || topics.length === 0) {
-      setError("Please select your branch, era, and at least one support topic.");
-      return;
-    }
-    setError("");
+  const send = async (text: string) => {
+    if (!text.trim() || loading) return;
+    const userMsg: Message = { id: Date.now().toString(), content: text, isUser: true };
+    const thinkingMsg: Message = { id: "thinking", content: "", isUser: false };
+    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
+    setInput("");
     setLoading(true);
-    // Persist preference locally; backend matching can be wired later
-    localStorage.setItem("va_battle_buddy_prefs", JSON.stringify({ branch, era, topics }));
-    await new Promise((r) => setTimeout(r, 800)); // simulate async
-    setLoading(false);
-    setConfirmed(true);
-  };
 
-  if (confirmed) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 px-4 py-12">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center space-y-4">
-            <div className="flex justify-center">
-              <div className="bg-green-100 rounded-full p-4">
-                <CheckCircle className="h-10 w-10 text-green-600" />
-              </div>
-            </div>
-            <h1 className="text-xl font-black text-navy">You're In</h1>
-            <p className="text-gray-500 text-sm">
-              We'll match you with a Battle Buddy based on your branch, era, and support needs. You'll hear from us within 48 hours.
-            </p>
-            <Button
-              className="w-full bg-navy text-white hover:bg-navy-dark mt-2"
-              onClick={() => setLocation("/dashboard")}
-            >
-              Go to My Dashboard
-            </Button>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
+    const nextHistory = [...history, { role: "user", content: text }];
+
+    try {
+      const res = await fetch(`${API_BASE}/api/battle-buddy/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: text, conversation_history: history }),
+      });
+      const data = await res.json();
+      const answer = data.answer ?? "Sorry, I couldn't get a response. Try again.";
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== "thinking"),
+        { id: Date.now().toString(), content: answer, isUser: false },
+      ]);
+      setHistory([...nextHistory, { role: "assistant", content: answer }]);
+    } catch {
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== "thinking"),
+        { id: Date.now().toString(), content: "Connection error — check your network and try again.", isUser: false },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 px-4 py-12">
-        <div className="w-full max-w-md space-y-6">
-          {/* Header card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center">
-            <div className="flex justify-center mb-3">
-              <div className="bg-gradient-to-br from-navy to-navy-dark p-3 rounded-xl shadow-lg">
-                <Users className="h-7 w-7 text-gold" />
-              </div>
-            </div>
-            <h1 className="text-xl font-black text-navy">Battle Buddy Program</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              Get matched with a fellow veteran who's been through the same process. Peer support, no judgment.
-            </p>
-          </div>
-
-          {/* Preferences form */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Branch of Service</Label>
-              <Select onValueChange={setBranch}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select branch…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BRANCHES.map((b) => (
-                    <SelectItem key={b} value={b}>{b}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-sm font-semibold text-gray-700">Service Era</Label>
-              <Select onValueChange={setEra}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select era…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ERAS.map((e) => (
-                    <SelectItem key={e} value={e}>{e}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 mb-2 block">Support Topics (select all that apply)</Label>
-              <div className="space-y-2">
-                {TOPICS.map(({ id, label }) => (
-                  <div key={id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={id}
-                      checked={topics.includes(id)}
-                      onCheckedChange={() => toggleTopic(id)}
-                    />
-                    <label htmlFor={id} className="text-sm text-gray-700 cursor-pointer">{label}</label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-            )}
-
-            <Button
-              className="w-full bg-navy text-white hover:bg-navy-dark"
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : <Shield size={15} className="mr-2" />}
-              Find My Battle Buddy
-            </Button>
-          </div>
-
-          <button
-            className="text-xs text-gray-400 hover:text-navy w-full text-center"
-            onClick={() => setLocation("/dashboard")}
-          >
-            Skip for now
+      <main className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-6 gap-4">
+        {/* Title bar */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => setLocation("/dashboard")} className="text-gray-400 hover:text-navy">
+            <ArrowLeft size={18} />
           </button>
+          <div className="bg-gradient-to-br from-navy to-navy-dark p-2 rounded-xl shadow">
+            <Users className="h-5 w-5 text-gold" />
+          </div>
+          <div>
+            <h1 className="font-black text-navy text-base leading-none">Battle Buddy</h1>
+            <p className="text-xs text-gray-400">Powered by Claude claude-opus-4-5 · Extended Reasoning</p>
+          </div>
         </div>
+
+        {/* Messages */}
+        <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-y-auto p-4 space-y-3 min-h-[400px]">
+          {messages.map((m) => (
+            <div key={m.id} className={`flex ${m.isUser ? "justify-end" : "justify-start"}`}>
+              {m.id === "thinking" ? (
+                <div className="flex items-center gap-2 bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Thinking…
+                </div>
+              ) : (
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                    m.isUser
+                      ? "bg-navy text-white rounded-br-sm"
+                      : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                  }`}
+                >
+                  {m.content}
+                </div>
+              )}
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Starters (only before first user message) */}
+        {messages.filter((m) => m.isUser).length === 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {STARTERS.map((s) => (
+              <button
+                key={s}
+                onClick={() => send(s)}
+                className="text-xs text-left px-3 py-2 rounded-xl border border-gray-200 hover:border-navy hover:text-navy text-gray-600 transition-colors bg-white"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); send(input); }}
+          className="flex gap-2"
+        >
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask your Battle Buddy…"
+            disabled={loading}
+            className="flex-1"
+          />
+          <Button type="submit" disabled={loading || !input.trim()} className="bg-navy text-white hover:bg-navy-dark px-4">
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+          </Button>
+        </form>
       </main>
       <Footer />
     </div>

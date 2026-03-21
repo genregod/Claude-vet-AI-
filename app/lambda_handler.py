@@ -41,6 +41,7 @@ def handler(event, context):
     # ── Async profile verification turn ─────────────────────────────
     if "verify_job" in event:
         import json
+        import time
         import boto3
         job = event["verify_job"]
         table = boto3.resource("dynamodb", region_name="us-east-1").Table(
@@ -51,13 +52,29 @@ def handler(event, context):
             from app.rag_chain import RAGChain
 
             profile = get_profile(job["user_id"])
-            result = RAGChain().verify_profile(
-                profile=profile,
-                conversation_history=job.get("conversation_history", []),
-                confirmed_fields=job.get("confirmed_fields", []),
-                skipped_fields=job.get("skipped_fields", []),
-                corrections=job.get("corrections", {}),
-            )
+
+            # Retry up to 3 times on rate limit (429)
+            last_exc = None
+            for attempt in range(3):
+                try:
+                    result = RAGChain().verify_profile(
+                        profile=profile,
+                        conversation_history=job.get("conversation_history", []),
+                        confirmed_fields=job.get("confirmed_fields", []),
+                        skipped_fields=job.get("skipped_fields", []),
+                        corrections=job.get("corrections", {}),
+                    )
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    if "429" in str(e) and attempt < 2:
+                        time.sleep(15 * (attempt + 1))  # 15s, 30s
+                    else:
+                        raise
+
+            if last_exc:
+                raise last_exc
 
             # If the AI returned profile_update, apply it immediately
             if result.get("profile_update"):

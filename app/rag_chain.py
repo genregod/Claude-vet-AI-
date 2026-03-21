@@ -330,9 +330,8 @@ class RAGChain:
         )
 
         message = self._client.messages.create(
-            model="claude-opus-4-5-20251101",
-            max_tokens=4096,
-            thinking={"type": "enabled", "budget_tokens": 1500},
+            model="claude-3-5-haiku-20241022",
+            max_tokens=1024,
             system=system_prompt,
             messages=messages,
         )

@@ -50,7 +50,7 @@ export function Header() {
                 <NavBtn icon={<Home size={15} />} label="Dashboard" onClick={() => setLocation("/dashboard")} />
                 <NavBtn icon={<FileText size={15} />} label="My Claims" onClick={() => setLocation("/dashboard?tab=claims")} />
                 <NavBtn icon={<Heart size={15} />} label="Benefits" onClick={() => setLocation("/dashboard?tab=benefits")} />
-                <NavBtn icon={<MessageCircle size={15} />} label="Battle Buddy" onClick={() => setLocation("/dashboard?tab=chat")} />
+                <NavBtn icon={<MessageCircle size={15} />} label="Battle Buddy" onClick={() => setLocation("/battle-buddy")} />
                 <div className="ml-3 flex items-center gap-3 border-l pl-3">
                   <span className="text-sm font-semibold text-navy truncate max-w-[140px]">{user.name}</span>
                   <Button size="sm" variant="outline" onClick={handleSignOut} className="gap-1 text-red-600 border-red-200 hover:bg-red-50">
@@ -91,7 +91,7 @@ export function Header() {
                 <MobileNavBtn label="Dashboard" onClick={() => { setLocation("/dashboard"); setMenuOpen(false); }} />
                 <MobileNavBtn label="My Claims" onClick={() => { setLocation("/dashboard?tab=claims"); setMenuOpen(false); }} />
                 <MobileNavBtn label="Benefits" onClick={() => { setLocation("/dashboard?tab=benefits"); setMenuOpen(false); }} />
-                <MobileNavBtn label="Battle Buddy" onClick={() => { setLocation("/dashboard?tab=chat"); setMenuOpen(false); }} />
+                <MobileNavBtn label="Battle Buddy" onClick={() => { setLocation("/battle-buddy"); setMenuOpen(false); }} />
                 <div className="px-4 pt-2 flex items-center justify-between">
                   <span className="text-sm font-semibold text-navy">{user.name}</span>
                   <Button size="sm" variant="outline" onClick={handleSignOut} className="gap-1 text-red-600 border-red-200">

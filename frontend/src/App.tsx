@@ -11,6 +11,7 @@ import { DBQPage } from "@/pages/DBQPage.tsx";
 import { SecureDashboard } from "@/pages/SecureDashboard.tsx";
 import { HealthCheckPage } from "@/pages/HealthCheck.tsx";
 import { LoginPage } from "@/pages/LoginPage.tsx";
+import { SignInPage } from "@/pages/SignInPage.tsx";
 import { AuthCallback } from "@/pages/AuthCallback.tsx";
 import { OnboardingPage } from "@/pages/OnboardingPage.tsx";
 import { ClaimConfirmedPage } from "@/pages/ClaimConfirmedPage.tsx";
@@ -54,7 +55,9 @@ function App() {
               <Route path="/dashboard" component={SecureDashboard} />
               <Route path="/health" component={HealthCheckPage} />
               <Route path="/login" component={LoginPage} />
+              <Route path="/signin" component={SignInPage} />
               <Route path="/callback" component={AuthCallback} />
+              <Route path="/auth/callback" component={AuthCallback} />
               <Route path="/onboarding" component={OnboardingPage} />
               <Route path="/claim-confirmed" component={ClaimConfirmedPage} />
               <Route path="/battle-buddy" component={BattleBuddyPage} />

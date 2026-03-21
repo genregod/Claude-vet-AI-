@@ -63,7 +63,7 @@ export function Header() {
                 {[["#services","Services"],["#how-it-works","How It Works"],["#testimonials","Success Stories"]].map(([href, label]) => (
                   <a key={href} href={href} className="px-3 py-2 text-sm text-gray-700 hover:text-navy font-medium rounded-lg hover:bg-gray-100 transition-all">{label}</a>
                 ))}
-                <Button size="sm" variant="outline" onClick={() => setLocation("/login")} className="ml-2 gap-1">
+                <Button size="sm" variant="outline" onClick={() => setLocation("/signin")} className="ml-2 gap-1">
                   <LogIn size={14} /> Sign In
                 </Button>
                 <Button size="sm" onClick={() => setLocation("/start-claim")} className="bg-navy text-white hover:bg-navy-dark ml-1">
@@ -101,7 +101,7 @@ export function Header() {
               </>
             ) : (
               <>
-                <MobileNavBtn label="Sign In" onClick={() => { setLocation("/login"); setMenuOpen(false); }} />
+                <MobileNavBtn label="Sign In" onClick={() => { setLocation("/signin"); setMenuOpen(false); }} />
                 <MobileNavBtn label="Start Claim" onClick={() => { setLocation("/start-claim"); setMenuOpen(false); }} />
               </>
             )}

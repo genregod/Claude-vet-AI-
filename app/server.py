@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -670,65 +670,101 @@ async def evaluate(
     )
 
 
-# ── Document upload ──────────────────────────────────────────────────
+# ── Document upload (presigned URL pattern — no Lambda buffering) ────
 
 ALLOWED_UPLOAD_EXTENSIONS = {".txt", ".md", ".pdf"}
-MAX_UPLOAD_BYTES = settings.max_upload_size_mb * 1024 * 1024
+_UPLOAD_PRESIGN_EXPIRY = 3600
 
 
-@app.post("/upload", response_model=UploadResponse)
-async def upload_document(
-    file: UploadFile = File(...),
-    source_type: str = Form(default="General"),
+class UploadUrlRequest(BaseModel):
+    filename: str
+    content_type: str = "application/octet-stream"
+    source_type: str = "General"
+
+
+class UploadUrlResponse(BaseModel):
+    upload_url: str
+    s3_key: str
+    expires_in: int
+
+
+class IngestRequest(BaseModel):
+    s3_key: str
+    filename: str
+    source_type: str = "General"
+
+
+@app.post("/upload-url", response_model=UploadUrlResponse)
+async def get_rag_upload_url(
+    req: UploadUrlRequest,
     current_user: UserProfile = Depends(get_current_user),
 ):
     """
-    Secure document upload endpoint. Veterans can submit supporting
-    evidence files which are cleaned, chunked, and added to the
-    vector store for retrieval.
+    Step 1 — Return a presigned S3 PUT URL so the client uploads directly
+    to S3 without passing bytes through Lambda.
 
-    Requires: authentication.
-    Accepted formats: .txt, .md
-    Max size: configurable (default 10 MB)
+    Accepted formats: .txt, .md, .pdf
+    """
+    ext = Path(req.filename).suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Accepted: .txt, .md, .pdf",
+        )
+    s3_key = f"rag-uploads/{current_user.user_id}/{uuid.uuid4().hex[:8]}_{req.filename}"
+    url = _S3_CLIENT.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": _S3_BUCKET,
+            "Key": s3_key,
+            "ContentType": req.content_type,
+        },
+        ExpiresIn=_UPLOAD_PRESIGN_EXPIRY,
+    )
+    return UploadUrlResponse(upload_url=url, s3_key=s3_key, expires_in=_UPLOAD_PRESIGN_EXPIRY)
+
+
+@app.post("/upload/ingest", response_model=UploadResponse)
+async def ingest_uploaded_document(
+    req: IngestRequest,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """
+    Step 2 — After the client has PUT the file to S3, call this endpoint
+    to download it from S3 into /tmp (bounded, ephemeral), chunk it, and
+    add it to the vector store.
+
+    The file is deleted from /tmp immediately after ingestion.
     """
     _require_initialized()
 
-    # Validate extension
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in {".txt", ".md"}:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type '{ext}'. Accepted: .txt, .md",
-        )
+    ext = Path(req.filename).suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type '{ext}'.")
 
-    # Read and validate size
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File exceeds {settings.max_upload_size_mb} MB limit.",
-        )
-
-    # Save with a unique filename to prevent collisions
-    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
-    upload_path = UPLOADS_DIR / safe_name
-    upload_path.write_bytes(content)
-
-    # Ingest the uploaded file into the vector store
+    tmp_path = Path(f"/tmp/{uuid.uuid4().hex[:8]}_{Path(req.filename).name}")
     try:
-        chunks = ingest_file(upload_path)
+        _S3_CLIENT.download_file(_S3_BUCKET, req.s3_key, str(tmp_path))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not retrieve file from S3: {exc}")
+
+    try:
+        chunks = ingest_file(tmp_path)
         added = rag_chain._store.add_chunks(chunks)
     except Exception as exc:
         logger.exception("Error ingesting uploaded file")
-        upload_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
     return UploadResponse(
         status="success",
-        filename=safe_name,
+        filename=req.filename,
         chunks_ingested=added,
         message=f"Document processed: {added} chunks added to knowledge base.",
     )
+
+
 
 
 # ── Admin & utility endpoints ────────────────────────────────────────

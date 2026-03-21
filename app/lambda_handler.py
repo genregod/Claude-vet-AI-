@@ -1,7 +1,9 @@
 from mangum import Mangum
 from app.server import app
 
-_mangum = Mangum(app, lifespan="auto")
+# lifespan="off": Lambda does not support persistent ASGI lifespan events.
+# Using "auto" risks 502s if startup handlers raise during cold starts.
+_mangum = Mangum(app, lifespan="off")
 
 
 def handler(event, context):

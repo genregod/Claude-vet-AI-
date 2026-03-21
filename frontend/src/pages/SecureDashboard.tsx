@@ -35,7 +35,7 @@ export function SecureDashboard() {
           || u.username;
         setUserName(name ?? "Veteran");
       })
-      .catch(() => setLocation("/"))
+      .catch(() => setLocation("/signin"))
       .finally(() => setLoading(false));
   }, []);
 
